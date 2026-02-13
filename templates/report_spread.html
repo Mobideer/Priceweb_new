@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Report: Spread - PriceWeb New{% endblock %}
+
+{% block content %}
+<h2>Report: Price Spread</h2>
+<div style="color:#8b949e; margin-bottom:10px;">
+    Shows items where (Max Price - Min Price) / Min Price >= Threshold %
+</div>
+
+<form class="toolbar" method="get">
+    <div>
+        <label>Threshold %</label>
+        <input name="threshold" value="{{ threshold }}">
+    </div>
+    <div>
+        <label>Limit</label>
+        <input name="limit" value="{{ limit }}">
+    </div>
+    <div>
+        <label>Max Price</label>
+        <input name="max_price" value="{{ max_price }}">
+    </div>
+    <div>
+        <label>In Stock Only</label>
+        <select name="in_stock_only">
+            <option value="1" {% if in_stock_only==1 %}selected{% endif %}>Yes</option>
+            <option value="0" {% if in_stock_only==0 %}selected{% endif %}>No</option>
+        </select>
+    </div>
+    <button type="submit" class="primary">Update</button>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>SKU</th>
+            <th>Name</th>
+            <th>Min Price (Suppliers)</th>
+            <th>Max Price (Suppliers)</th>
+            <th>Spread %</th>
+            <th>Count</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td class="mono"><a href="/?q={{ item.sku }}">{{ item.sku }}</a></td>
+            <td>{{ item.name }}</td>
+            <td>
+                <div class="price-tag">{{ item.min_price }}</div>
+                <div class="supplier-name">{{ item.min_suppliers }}</div>
+            </td>
+            <td>
+                <div class="price-tag">{{ item.max_price }}</div>
+                <div class="supplier-name">{{ item.max_suppliers }}</div>
+            </td>
+            <td>
+                <b style="color: var(--warning-color)">{{ item.spread_pct }}%</b>
+            </td>
+            <td>{{ item.suppliers_cnt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

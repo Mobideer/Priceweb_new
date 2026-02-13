@@ -1,0 +1,299 @@
+import os
+import json
+import time
+import sqlite3
+import threading
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
+
+from flask import Flask, render_template, request, jsonify, abort, redirect, url_for
+
+import db
+
+app = Flask(__name__)
+
+# --- Filters ---
+@app.template_filter('urlencode')
+def urlencode_filter(s):
+    if s is None:
+        return ""
+    return quote_plus(str(s))
+
+@app.template_filter('strip')
+def strip_filter(s):
+    return str(s or "").strip()
+
+@app.template_filter('format_ts')
+def format_ts_filter(ts):
+    if not ts:
+        return ""
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(ts)))
+
+@app.template_filter('fromjson')
+def fromjson_filter(s):
+    return json.loads(s)
+
+# --- Helpers ---
+
+def _get_status():
+    st = db.get_db_status()
+    # Add extra derived info if needed
+    return st
+
+def _search_items(q: str, limit: int = 20):
+    q = (q or "").strip().lower()
+    if not q:
+        return {"items": []}
+        
+    conn = db.get_connection()
+    try:
+        # Simple search for now: sku match or name match
+        # Optimized for "starts with" then "contains"
+        # priceweb used a complex scoring in python memory. 
+        # We'll use SQL LIKE for simplicity and speed on large dataset without full load
+        
+        # Priority 1: Exact SKU
+        rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ?", (q,)).fetchall()
+        if not rows:
+             # Priority 2: SKU starts with
+            rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? LIMIT ?", (q + '%', limit)).fetchall()
+        
+        if len(rows) < limit:
+            # Priority 3: Name contains
+            rem = limit - len(rows)
+            # Exclude already found
+            found_skus = {r['sku'] for r in rows}
+            placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
+            
+            # Use a simple LIKE
+            cursor = conn.execute(
+                f"SELECT * FROM items_latest WHERE lower(name) LIKE ? AND sku NOT IN ({placeholders}) LIMIT ?",
+                (f'%{q}%', *found_skus, rem)
+            )
+            rows.extend(cursor.fetchall())
+            
+        return {"items": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+# --- Routes ---
+
+@app.route('/')
+def index():
+    q = request.args.get('q', '').strip()
+    limit = request.args.get('limit', 20, type=int)
+    
+    status = _get_status()
+    results = {"items": []}
+    if q:
+        results = _search_items(q, limit)
+
+    return render_template('index.html', 
+                           q=q, 
+                           limit=limit, 
+                           items=results['items'], 
+                           status=status)
+
+@app.route('/ui/history')
+def ui_history():
+    sku = request.args.get('sku', '').strip()
+    days = request.args.get('days', 7, type=int)
+    
+    if not sku:
+        return "SKU required", 400
+        
+    conn = db.get_connection()
+    try:
+        cutoff = int(time.time()) - days * 86400
+        # Aggregation logic similar to priceweb: min price per day
+        rows = conn.execute("""
+            SELECT 
+                date(ts, 'unixepoch', 'localtime') as day_date,
+                MIN(our_price) as our_price,
+                MIN(min_sup_price) as min_sup_price
+            FROM item_snapshots
+            WHERE sku = ? AND ts >= ?
+            GROUP BY day_date
+            ORDER BY day_date ASC
+        """, (sku, cutoff)).fetchall()
+        
+        data = [dict(r) for r in rows]
+        return render_template('partials/history.html', sku=sku, items=data, days=days)
+    finally:
+        conn.close()
+
+# --- Reports ---
+
+@app.route('/reports/spread')
+def report_spread():
+    threshold = request.args.get('threshold', 20.0, type=float)
+    limit = request.args.get('limit', 200, type=int)
+    max_price = request.args.get('max_price', 2000000.0, type=float)
+    in_stock_only = request.args.get('in_stock_only', 1, type=int)
+    
+    conn = db.get_connection()
+    try:
+        # Fetch logic adapted from priceweb
+        # Complex SQL replaced with simplified version for maintenance if possible, 
+        # but sticking close to original logic to ensure same results.
+        
+        # Note: 'suppliers_json' parsing in SQL depends on sqlite3 json extension which is standard now.
+        
+        stock_filter = ""
+        if in_stock_only:
+             # Just check min_sup_qty > 0 implies at least one supplier has stock
+             # But the report wants specific suppliers. 
+             # We will stick to the aggregate fields in items_latest for speed if possible?
+             # No, priceweb parsed JSON in SQL. Let's try to trust items_latest fields first
+             # min_sup_price is already calculated! We can assume it's correct from worker.
+             # This simplifies the query significantly.
+             pass
+        
+        # items_latest has min_sup_price, min_sup_supplier derived from worker. 
+        # However, the spread report calculates spread between MIN and MAX supplier prices.
+        # items_latest DOES NOT have max_sup_price. We need to parse JSON.
+        
+        query = f"""
+            SELECT 
+                sku, name, suppliers_json, min_sup_price
+            FROM items_latest
+            WHERE min_sup_price > 0 AND min_sup_price <= ?
+        """
+        params = [max_price]
+        
+        rows = conn.execute(query, params).fetchall()
+        
+        results = []
+        for r in rows:
+            try:
+                sups = json.loads(r['suppliers_json'])
+            except:
+                continue
+                
+            # Filter active suppliers
+            valid_sups = []
+            for s in sups:
+                p = float(s.get('price', 0))
+                q = float(s.get('qty', 0))
+                if p <= 0: continue
+                if in_stock_only and q <= 0: continue
+                valid_sups.append(s)
+            
+            if len(valid_sups) < 2:
+                continue
+                
+            prices = [float(s['price']) for s in valid_sups]
+            min_p = min(prices)
+            max_p = max(prices)
+            
+            if min_p <= 0: continue
+            
+            spread = (max_p - min_p) * 100.0 / min_p
+            if spread < threshold:
+                continue
+            
+            # Find definitions
+            min_s_names = [s['supplier'] for s in valid_sups if float(s['price']) == min_p]
+            max_s_names = [s['supplier'] for s in valid_sups if float(s['price']) == max_p]
+            
+            results.append({
+                'sku': r['sku'],
+                'name': r['name'],
+                'min_price': min_p,
+                'min_suppliers': ", ".join(min_s_names),
+                'max_price': max_p,
+                'max_suppliers': ", ".join(max_s_names),
+                'spread_pct': round(spread, 2),
+                'suppliers_cnt': len(valid_sups)
+            })
+            
+        # Sort and limit in Python
+        results.sort(key=lambda x: x['spread_pct'], reverse=True)
+        results = results[:limit]
+        
+        return render_template('report_spread.html', 
+                               items=results, 
+                               threshold=threshold, 
+                               limit=limit,
+                               max_price=max_price,
+                               in_stock_only=in_stock_only)
+    finally:
+        conn.close()
+
+@app.route('/reports/markup')
+def report_markup():
+    markup_pct = request.args.get('markup_pct', 10.0, type=float)
+    limit = request.args.get('limit', 200, type=int)
+    max_price = request.args.get('max_price', 2000000.0, type=float)
+    in_stock_only = request.args.get('in_stock_only', 1, type=int)
+    
+    conn = db.get_connection()
+    try:
+        # Using items_latest fields which are pre-calculated by worker is much faster/easier
+        # items_latest.min_sup_price is exactly what we need.
+        
+        query = """
+            SELECT * FROM items_latest 
+            WHERE our_price > 0 
+              AND min_sup_price > 0 
+              AND min_sup_price <= ?
+        """
+        params = [max_price]
+        
+        if in_stock_only:
+             query += " AND min_sup_qty > 0"
+             
+        rows = conn.execute(query, params).fetchall()
+        
+        results = []
+        for r in rows:
+            our = r['our_price']
+            min_sup = r['min_sup_price']
+            
+            our_with_markup = our * (1.0 + markup_pct / 100.0)
+            
+            if our_with_markup < min_sup:
+                delta_abs = min_sup - our_with_markup
+                if our_with_markup > 0:
+                    delta_pct = (min_sup / our_with_markup - 1.0) * 100.0
+                else:
+                    delta_pct = 0
+                
+                results.append({
+                    'sku': r['sku'],
+                    'name': r['name'],
+                    'our_price': our,
+                    'our_qty': r['our_qty'],
+                    'min_sup_price': min_sup,
+                    'min_suppliers': r['min_sup_supplier'],
+                    'our_price_with_markup': round(our_with_markup, 2),
+                    'delta_abs': round(delta_abs, 2),
+                    'delta_pct': round(delta_pct, 2)
+                })
+        
+        results.sort(key=lambda x: x['delta_abs'], reverse=True)
+        results = results[:limit]
+        
+        return render_template('report_markup.html',
+                               items=results,
+                               markup_pct=markup_pct,
+                               limit=limit,
+                               max_price=max_price,
+                               in_stock_only=in_stock_only)
+    finally:
+        conn.close()
+
+@app.route('/api/reload')
+def api_reload():
+    # Trigger worker reload manually
+    import subprocess
+    # Run worker in background or foreground? Foreground for feedback
+    try:
+        subprocess.run(["python3", "worker.py"], check=True, timeout=120)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5002))
+    app.run(host='0.0.0.0', port=port, debug=True)

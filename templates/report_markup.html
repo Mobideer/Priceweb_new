@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Report: Markup - PriceWeb New{% endblock %}
+
+{% block content %}
+<h2>Report: Markup Opportunities</h2>
+<div style="color:#8b949e; margin-bottom:10px;">
+    Shows items where <b>Our Price * (1 + Markup%) < Min Supplier Price</b>.
+</div>
+
+<form class="toolbar" method="get">
+    <div>
+        <label>Markup %</label>
+        <input name="markup_pct" value="{{ markup_pct }}">
+    </div>
+    <div>
+        <label>Limit</label>
+        <input name="limit" value="{{ limit }}">
+    </div>
+    <div>
+        <label>Max Price</label>
+        <input name="max_price" value="{{ max_price }}">
+    </div>
+    <div>
+        <label>In Stock Only</label>
+        <select name="in_stock_only">
+            <option value="1" {% if in_stock_only==1 %}selected{% endif %}>Yes</option>
+            <option value="0" {% if in_stock_only==0 %}selected{% endif %}>No</option>
+        </select>
+    </div>
+    <button type="submit" class="primary">Update</button>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>SKU</th>
+            <th>Name</th>
+            <th>Our Price</th>
+            <th>With Markup {{ markup_pct }}%</th>
+            <th>Min Supplier Price</th>
+            <th>Delta (Abs)</th>
+            <th>Delta (%)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td class="mono"><a href="/?q={{ item.sku }}">{{ item.sku }}</a></td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.our_price }}</td>
+            <td>{{ item.our_price_with_markup }}</td>
+            <td>
+                <div class="price-tag">{{ item.min_sup_price }}</div>
+                <div class="supplier-name">{{ item.min_suppliers }}</div>
+            </td>
+            <td class="delta-pos">+{{ item.delta_abs }}</td>
+            <td>{{ item.delta_pct }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

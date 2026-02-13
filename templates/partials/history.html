@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}History: {{ sku }} - PriceWeb New{% endblock %}
+
+{% block content %}
+<h2>Price History: <span class="mono">{{ sku }}</span></h2>
+
+<form class="toolbar" method="get">
+    <input type="hidden" name="sku" value="{{ sku }}">
+    <label>Days:</label>
+    <select name="days" onchange="this.form.submit()">
+        <option value="7" {% if days==7 %}selected{% endif %}>7 Days</option>
+        <option value="30" {% if days==30 %}selected{% endif %}>30 Days</option>
+        <option value="90" {% if days==90 %}selected{% endif %}>90 Days</option>
+    </select>
+    <a href="/" style="margin-left:auto; padding:8px;">← Back to Dashboard</a>
+</form>
+
+<div class="chart-container">
+    <canvas id="historyChart"></canvas>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Our Price</th>
+            <th>Min Supplier Price</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.day_date }}</td>
+            <td>{{ item.our_price }}</td>
+            <td>{{ item.min_sup_price }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    const data = {
+        labels: [{% for i in items %}'{{ i.day_date }}', {% endfor %}],
+    datasets: [
+        {
+            label: 'Our Price',
+            data: [{% for i in items %}{{ i.our_price }}, {% endfor %}],
+        borderColor: '#58a6ff',
+            tension: 0.1
+        },
+    {
+        label: 'Min Supplier Price',
+            data: [{% for i in items %} { { i.min_sup_price } }, {% endfor %}],
+    borderColor: '#d29922',
+        tension: 0.1
+        }
+    ]
+};
+
+    const config = {
+        type: 'line',
+        data: data,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    labels: { color: '#c9d1d9' }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { color: '#8b949e' },
+                    grid: { color: '#30363d' }
+                },
+                x: {
+                    ticks: { color: '#8b949e' },
+                    grid: { color: '#30363d' }
+                }
+            }
+        }
+    };
+
+    new Chart(ctx, config);
+</script>
+{% endblock %}
