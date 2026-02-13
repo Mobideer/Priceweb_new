@@ -3,6 +3,8 @@ import json
 import time
 import sqlite3
 import threading
+import subprocess
+import sys
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
@@ -322,11 +324,8 @@ def report_markup():
 
 @app.route('/api/reload')
 def api_reload():
-    # Trigger worker reload manually
-    import subprocess
-    # Run worker in background or foreground? Foreground for feedback
     try:
-        subprocess.run(["python3", "worker.py"], check=True, timeout=120)
+        subprocess.run([sys.executable, "worker.py"], check=True, timeout=120)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
