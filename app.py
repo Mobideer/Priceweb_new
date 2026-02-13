@@ -8,11 +8,47 @@ import sys
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
-from flask import Flask, render_template, request, jsonify, abort, redirect, url_for
+from flask import Flask, render_template, request, jsonify, abort, redirect, url_for, flash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 import db
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
+
+# --- Authentication ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
+
+@login_manager.user_loader
+def load_user(user_id):
+    if user_id == "priceuser":
+        return User(user_id)
+    return None
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username == "priceuser" and password == "priceuser":
+            user = User(username)
+            login_user(user)
+            return redirect(url_for('index'))
+        else:
+            flash('Неверный логин или пароль')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
 # --- Filters ---
 @app.template_filter('urlencode')
@@ -90,6 +126,7 @@ def api_search():
     return jsonify(results)
 
 @app.route('/')
+@login_required
 def index():
     q = request.args.get('q', '').strip()
     limit = request.args.get('limit', 20, type=int)
@@ -106,6 +143,7 @@ def index():
                            status=status)
 
 @app.route('/ui/history')
+@login_required
 def ui_history():
     sku = request.args.get('sku', '').strip()
     days = request.args.get('days', 7, type=int)
@@ -136,6 +174,7 @@ def ui_history():
 # --- Reports ---
 
 @app.route('/reports/spread')
+@login_required
 def report_spread():
     threshold = request.args.get('threshold', 20.0, type=float)
     limit = request.args.get('limit', 200, type=int)
@@ -229,6 +268,7 @@ def report_spread():
         conn.close()
 
 @app.route('/reports/markup')
+@login_required
 def report_markup():
     markup_pct = request.args.get('markup_pct', 10.0, type=float)
     limit = request.args.get('limit', 200, type=int)
@@ -323,6 +363,7 @@ def report_markup():
         conn.close()
 
 @app.route('/api/reload')
+@login_required
 def api_reload():
     import sys
     try:
