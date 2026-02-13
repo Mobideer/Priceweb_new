@@ -11,7 +11,8 @@
     <span style="color: var(--danger-color)">● {{ status.error }}</span>
     {% endif %}
     <div class="stats">
-        DB: <b>priceweb.db</b> | Status: <b style="color: #4caf50;">OK</b> | Items: <b>{{ status.total_items }}</b>
+        DB: <b>{{ status.db_path.split('/')[-1] }}</b> | Status: <b style="color: #4caf50;">OK</b> | Items: <b>{{
+            status.items_db }}</b>
         <button id="reloadBtn" onclick="triggerReload(event)"
             style="margin-left: 10px; cursor: pointer; background: var(--bg-card); color: var(--accent-color); border: 1px solid var(--accent-color); border-radius: 4px; padding: 2px 8px; font-size: 11px;">Reload
             Data</button>
