@@ -10,8 +10,27 @@ JSON_URL = os.environ.get("PRICE_JSON_URL", "https://app.price-matrix.ru/WebApi/
 SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
 LOCAL_DATA_FILE = "data.json"
 
-def process_single_product(p):
-    """Parses a single product dictionary from the JSON and returns the item record."""
+def get_exchange_rates():
+    """Fetches current exchange rates (USD, EUR -> RUB) with fallbacks."""
+    rates = {"USD": 92.0, "EUR": 100.0, "RUB": 1.0}
+    try:
+        # Using a reliable public API
+        resp = requests.get("https://open.er-api.com/v6/latest/USD", timeout=10)
+        if resp.ok:
+            data = resp.json()
+            usd_rub = data.get("rates", {}).get("RUB")
+            if usd_rub:
+                rates["USD"] = usd_rub
+                # Get EUR through USD cross rate
+                eur_usd = data.get("rates", {}).get("EUR")
+                if eur_usd:
+                    rates["EUR"] = usd_rub / eur_usd
+    except Exception as e:
+        print(f"Warning: Could not fetch real-time exchange rates: {e}. Using default values.")
+    return rates
+
+def process_single_product(p, rates):
+    """Parses a single product dictionary and returns the item record with prices in RUB."""
     sku = str(p.get('sku', '')).strip()
     if not sku:
         return None
@@ -27,11 +46,12 @@ def process_single_product(p):
         our_qty = float(p.get('quantity', 0))
     except:
         our_qty = 0.0
+        
     my_sklad_price = 0.0
     my_sklad_qty = 0.0
     
     suppliers_data = []
-    min_p = None
+    min_p_rub = None
     min_q = None
     min_sup_name = None
     
@@ -47,39 +67,40 @@ def process_single_product(p):
             continue
             
         try:
-            price = float(s_prod.get('price', 0))
+            raw_p = float(s_prod.get('price', 0))
         except:
-            price = 0.0
+            raw_p = 0.0
             
         try:
             qty = float(s_prod.get('quantity', 0))
         except:
             qty = 0.0
             
-        currency = s_prod.get('currency', 'RUB')
+        currency = s_prod.get('currency', 'RUB').upper()
+        # Convert to RUB
+        rate = rates.get(currency, 1.0)
+        price_rub = raw_p * rate
+        
         sup_sku = s_prod.get('sku', '')
         sup_prod_name = s_prod.get('name', '')
         
-        # Issue 2: MySklad data source
         if s_name.lower() == "мой склад":
-            my_sklad_price = price
+            my_sklad_price = price_rub
             my_sklad_qty = qty
             
-        # Add to list
         suppliers_data.append({
             "supplier": s_name,
-            "price": price,
-            "qty": qty,
+            "price": round(price_rub, 2),
+            "original_price": raw_p,
             "currency": currency,
+            "qty": qty,
             "supplier_sku": sup_sku,
             "product_name": sup_prod_name
         })
         
-        # Calc min price (conceptually) - Exclude "Мой склад" from competitor calculations? 
-        # Usually competitors are other suppliers. Priceweb usually excludes MS from min_sup.
-        if s_name.lower() != "мой склад" and price > 0 and qty > 0:
-            if min_p is None or price < min_p:
-                min_p = price
+        if s_name.lower() != "мой склад" and price_rub > 0 and qty > 0:
+            if min_p_rub is None or price_rub < min_p_rub:
+                min_p_rub = price_rub
                 min_q = qty
                 min_sup_name = s_name
 
@@ -88,9 +109,9 @@ def process_single_product(p):
         "name": name,
         "our_price": our_price,
         "our_qty": our_qty,
-        "my_sklad_price": my_sklad_price,
+        "my_sklad_price": round(my_sklad_price, 2),
         "my_sklad_qty": my_sklad_qty,
-        "min_sup_price": min_p,
+        "min_sup_price": round(min_p_rub, 2) if min_p_rub else None,
         "min_sup_qty": min_q,
         "min_sup_supplier": min_sup_name,
         "suppliers": suppliers_data
@@ -104,6 +125,9 @@ def run():
     host = os.uname().nodename
     notify.notify_start(host)
     t0 = time.time()
+    
+    rates = get_exchange_rates()
+    print(f"Current Rates: {rates}")
     
     total_count = 0
     inserted = 0
@@ -120,12 +144,9 @@ def run():
             cur_upsert = conn.cursor()
             cur_snap = conn.cursor()
 
-            # Determine source: local file if exists, else fetch URL
             if os.path.exists(LOCAL_DATA_FILE):
                 print(f"Reading from local file: {LOCAL_DATA_FILE}")
                 f = open(LOCAL_DATA_FILE, 'r', encoding='utf-8')
-                # Path depends on JSON structure: {"catalog": [ {"products": [ ... ]} ]}
-                # We use ijson to iterate over products
                 objects = ijson.items(f, 'catalog.item.products.item')
             else:
                 print(f"Fetching from URL: {JSON_URL}")
@@ -138,7 +159,7 @@ def run():
                 if total_count % 1000 == 0:
                     print(f"Processed {total_count} items...")
 
-                it = process_single_product(p)
+                it = process_single_product(p, rates)
                 if not it:
                     continue
 
@@ -154,7 +175,7 @@ def run():
                 
                 prev = existing.get(sku)
                 is_new = prev is None
-                is_changed = prev != curr_vals
+                is_changed = (prev != curr_vals) if not is_new else True
                 
                 if is_new or is_changed:
                     cur_snap.execute("""
@@ -199,7 +220,6 @@ def run():
             conn.execute("INSERT INTO meta(k,v) VALUES('last_reload_ts', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(ts),))
             conn.commit()
             
-            # Close file if opened
             if 'f' in locals():
                 f.close()
 

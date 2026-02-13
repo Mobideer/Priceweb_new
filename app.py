@@ -78,6 +78,15 @@ def _search_items(q: str, limit: int = 20):
 
 # --- Routes ---
 
+@app.route('/api/search')
+def api_search():
+    q = request.args.get('q', '').strip()
+    limit = request.args.get('limit', 20, type=int)
+    results = {"items": []}
+    if q:
+        results = _search_items(q, limit)
+    return jsonify(results)
+
 @app.route('/')
 def index():
     q = request.args.get('q', '').strip()
