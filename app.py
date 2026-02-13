@@ -130,53 +130,45 @@ def report_spread():
     limit = request.args.get('limit', 200, type=int)
     max_price = request.args.get('max_price', 2000000.0, type=float)
     in_stock_only = request.args.get('in_stock_only', 1, type=int)
+    exclude_list = request.args.getlist('exclude')
+    exclude_set = {s.lower() for s in exclude_list}
     
     conn = db.get_connection()
     try:
-        # Fetch logic adapted from priceweb
-        # Complex SQL replaced with simplified version for maintenance if possible, 
-        # but sticking close to original logic to ensure same results.
+        # Get all distinct supplier names for the filter UI
+        all_sups_rows = conn.execute("SELECT suppliers_json FROM items_latest").fetchall()
+        suppliers_all = set()
+        for r in all_sups_rows:
+            try:
+                sups = json.loads(r['suppliers_json'])
+                for s in sups:
+                    name = s.get('supplier', '').strip()
+                    if name and name.lower() != 'мой склад':
+                        suppliers_all.add(name)
+            except: continue
         
-        # Note: 'suppliers_json' parsing in SQL depends on sqlite3 json extension which is standard now.
-        
-        stock_filter = ""
-        if in_stock_only:
-             # Just check min_sup_qty > 0 implies at least one supplier has stock
-             # But the report wants specific suppliers. 
-             # We will stick to the aggregate fields in items_latest for speed if possible?
-             # No, priceweb parsed JSON in SQL. Let's try to trust items_latest fields first
-             # min_sup_price is already calculated! We can assume it's correct from worker.
-             # This simplifies the query significantly.
-             pass
-        
-        # items_latest has min_sup_price, min_sup_supplier derived from worker. 
-        # However, the spread report calculates spread between MIN and MAX supplier prices.
-        # items_latest DOES NOT have max_sup_price. We need to parse JSON.
-        
-        query = f"""
-            SELECT 
-                sku, name, suppliers_json, min_sup_price
-            FROM items_latest
-            WHERE min_sup_price > 0 AND min_sup_price <= ?
-        """
-        params = [max_price]
-        
-        rows = conn.execute(query, params).fetchall()
+        query = f"SELECT sku, name, suppliers_json FROM items_latest WHERE min_sup_price > 0"
+        rows = conn.execute(query).fetchall()
         
         results = []
         for r in rows:
             try:
                 sups = json.loads(r['suppliers_json'])
-            except:
-                continue
+            except: continue
                 
-            # Filter active suppliers
             valid_sups = []
             for s in sups:
+                name = s.get('supplier', '').strip()
+                if name.lower() == 'мой склад' or name.lower() in exclude_set:
+                    continue
+                    
                 p = float(s.get('price', 0))
                 q = float(s.get('qty', 0))
                 if p <= 0: continue
                 if in_stock_only and q <= 0: continue
+                # Issue 5: Filter garbage prices early in calculation
+                if p > max_price: continue
+                
                 valid_sups.append(s)
             
             if len(valid_sups) < 2:
@@ -186,13 +178,14 @@ def report_spread():
             min_p = min(prices)
             max_p = max(prices)
             
-            if min_p <= 0: continue
+            # Re-check max_price on the final spread max to be sure
+            if max_p > max_price:
+                 continue
             
             spread = (max_p - min_p) * 100.0 / min_p
             if spread < threshold:
                 continue
             
-            # Find definitions
             min_s_names = [s['supplier'] for s in valid_sups if float(s['price']) == min_p]
             max_s_names = [s['supplier'] for s in valid_sups if float(s['price']) == max_p]
             
@@ -207,7 +200,6 @@ def report_spread():
                 'suppliers_cnt': len(valid_sups)
             })
             
-        # Sort and limit in Python
         results.sort(key=lambda x: x['spread_pct'], reverse=True)
         results = results[:limit]
         
@@ -216,7 +208,11 @@ def report_spread():
                                threshold=threshold, 
                                limit=limit,
                                max_price=max_price,
-                               in_stock_only=in_stock_only)
+                               in_stock_only=in_stock_only,
+                               suppliers_all=sorted(list(suppliers_all)),
+                               exclude_set=exclude_set,
+                               exclude_list=exclude_list,
+                               total=len(rows))
     finally:
         conn.close()
 
@@ -226,46 +222,71 @@ def report_markup():
     limit = request.args.get('limit', 200, type=int)
     max_price = request.args.get('max_price', 2000000.0, type=float)
     in_stock_only = request.args.get('in_stock_only', 1, type=int)
+    qty_equal = request.args.get('qty_equal', 0, type=int)
+    exclude_list = request.args.getlist('exclude')
+    exclude_set = {s.lower() for s in exclude_list}
     
     conn = db.get_connection()
     try:
-        # Using items_latest fields which are pre-calculated by worker is much faster/easier
-        # items_latest.min_sup_price is exactly what we need.
-        
-        query = """
-            SELECT * FROM items_latest 
-            WHERE our_price > 0 
-              AND min_sup_price > 0 
-              AND min_sup_price <= ?
-        """
-        params = [max_price]
-        
-        if in_stock_only:
-             query += " AND min_sup_qty > 0"
-             
-        rows = conn.execute(query, params).fetchall()
+        # Get all distinct supplier names
+        all_sups_rows = conn.execute("SELECT suppliers_json FROM items_latest").fetchall()
+        suppliers_all = set()
+        for r in all_sups_rows:
+            try:
+                sups = json.loads(r['suppliers_json'])
+                for s in sups:
+                    name = s.get('supplier', '').strip()
+                    if name and name.lower() != 'мой склад':
+                        suppliers_all.add(name)
+            except: continue
+
+        query = "SELECT * FROM items_latest WHERE our_price > 0"
+        rows = conn.execute(query).fetchall()
         
         results = []
         for r in rows:
             our = r['our_price']
-            min_sup = r['min_sup_price']
+            our_qty = r['our_qty']
+            
+            try:
+                sups = json.loads(r['suppliers_json'])
+            except: continue
+                
+            filtered_prices = []
+            filtered_sups = []
+            for s in sups:
+                name = s.get('supplier', '').strip()
+                if name.lower() == 'мой склад' or name.lower() in exclude_set:
+                    continue
+                
+                p = float(s.get('price', 0))
+                q = float(s.get('qty', 0))
+                
+                if p <= 0 or p > max_price: continue
+                if in_stock_only and q <= 0: continue
+                if qty_equal and q != our_qty: continue
+                
+                filtered_prices.append(p)
+                filtered_sups.append(name)
+                
+            if not filtered_prices: continue
+            
+            min_sup = min(filtered_prices)
+            min_s_names = [filtered_sups[i] for i, p in enumerate(filtered_prices) if p == min_sup]
             
             our_with_markup = our * (1.0 + markup_pct / 100.0)
             
             if our_with_markup < min_sup:
                 delta_abs = min_sup - our_with_markup
-                if our_with_markup > 0:
-                    delta_pct = (min_sup / our_with_markup - 1.0) * 100.0
-                else:
-                    delta_pct = 0
+                delta_pct = (min_sup / our_with_markup - 1.0) * 100.0 if our_with_markup > 0 else 0
                 
                 results.append({
                     'sku': r['sku'],
                     'name': r['name'],
                     'our_price': our,
-                    'our_qty': r['our_qty'],
+                    'our_qty': our_qty,
                     'min_sup_price': min_sup,
-                    'min_suppliers': r['min_sup_supplier'],
+                    'min_suppliers': ", ".join(min_s_names),
                     'our_price_with_markup': round(our_with_markup, 2),
                     'delta_abs': round(delta_abs, 2),
                     'delta_pct': round(delta_pct, 2)
@@ -279,7 +300,12 @@ def report_markup():
                                markup_pct=markup_pct,
                                limit=limit,
                                max_price=max_price,
-                               in_stock_only=in_stock_only)
+                               in_stock_only=in_stock_only,
+                               qty_equal=qty_equal,
+                               suppliers_all=sorted(list(suppliers_all)),
+                               exclude_set=exclude_set,
+                               exclude_list=exclude_list,
+                               total=len(rows))
     finally:
         conn.close()
 

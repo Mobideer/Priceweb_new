@@ -27,7 +27,9 @@ def process_single_product(p):
         our_qty = float(p.get('quantity', 0))
     except:
         our_qty = 0.0
-        
+    my_sklad_price = 0.0
+    my_sklad_qty = 0.0
+    
     suppliers_data = []
     min_p = None
     min_q = None
@@ -38,7 +40,7 @@ def process_single_product(p):
         raw_suppliers = []
         
     for s in raw_suppliers:
-        s_name = s.get('name', 'Unknown')
+        s_name = (s.get('name') or 'Unknown').strip()
         s_prod = s.get('product', {})
         
         if not s_prod:
@@ -54,10 +56,16 @@ def process_single_product(p):
         except:
             qty = 0.0
             
-        currency = s_prod.get('currency', '')
+        currency = s_prod.get('currency', 'RUB')
         sup_sku = s_prod.get('sku', '')
         sup_prod_name = s_prod.get('name', '')
         
+        # Issue 2: MySklad data source
+        if s_name.lower() == "мой склад":
+            my_sklad_price = price
+            my_sklad_qty = qty
+            
+        # Add to list
         suppliers_data.append({
             "supplier": s_name,
             "price": price,
@@ -67,7 +75,9 @@ def process_single_product(p):
             "product_name": sup_prod_name
         })
         
-        if price > 0 and qty > 0:
+        # Calc min price (conceptually) - Exclude "Мой склад" from competitor calculations? 
+        # Usually competitors are other suppliers. Priceweb usually excludes MS from min_sup.
+        if s_name.lower() != "мой склад" and price > 0 and qty > 0:
             if min_p is None or price < min_p:
                 min_p = price
                 min_q = qty
@@ -78,8 +88,8 @@ def process_single_product(p):
         "name": name,
         "our_price": our_price,
         "our_qty": our_qty,
-        "my_sklad_price": our_price,
-        "my_sklad_qty": our_qty,
+        "my_sklad_price": my_sklad_price,
+        "my_sklad_qty": my_sklad_qty,
         "min_sup_price": min_p,
         "min_sup_qty": min_q,
         "min_sup_supplier": min_sup_name,

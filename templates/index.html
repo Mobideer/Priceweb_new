@@ -10,12 +10,13 @@
     {% else %}
     <span style="color: var(--danger-color)">● {{ status.error }}</span>
     {% endif %}
-    <a href="#" onclick="triggerReload(); return false;">[Reload Data]</a>
+    <a href="javascript:void(0)" onclick="triggerReload(event)">[Reload Data]</a>
 </div>
 
-<form class="toolbar" method="get" action="/">
-    <input type="text" name="q" placeholder="Search SKU or Name..." value="{{ q }}" size="40">
-    <select name="limit">
+<form id="searchForm" class="toolbar" method="get" action="/">
+    <input type="text" id="searchInput" name="q" placeholder="Live Search SKU or Name..." value="{{ q }}" size="40"
+        autocomplete="off">
+    <select name="limit" onchange="this.form.submit()">
         <option value="20" {% if limit==20 %}selected{% endif %}>20 results</option>
         <option value="50" {% if limit==50 %}selected{% endif %}>50 results</option>
         <option value="100" {% if limit==100 %}selected{% endif %}>100 results</option>
@@ -24,26 +25,27 @@
 </form>
 
 {% if items %}
-<table>
+<table class="main-table">
     <thead>
         <tr>
-            <th>SKU</th>
+            <th>SKU / Updated</th>
             <th>Product Name</th>
-            <th>Our Price</th>
-            <th>MySklad</th>
-            <th>Suppliers (Min)</th>
-            <th>Detailed Suppliers</th>
+            <th>Price Matrix</th>
+            <th>Мой Склад</th>
+            <th>Competitor (Min)</th>
             <th>Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for item in items %}
-        <tr>
+        <tr class="product-row">
             <td class="mono">
-                {{ item.sku }}<br>
-                <div style="font-size:0.8em; color:#666">{{ item.updated_at | format_ts }}</div>
+                <b>{{ item.sku }}</b><br>
+                <span style="font-size:0.8em; color:#666">{{ item.updated_at | format_ts }}</span>
             </td>
-            <td>{{ item.name }}</td>
+            <td>
+                {{ item.name }}
+            </td>
             <td>
                 <div class="price-tag">{{ item.our_price }}</div>
                 <div class="qty-tag">qty: {{ item.our_qty }}</div>
@@ -53,29 +55,43 @@
                 <div class="qty-tag">qty: {{ item.my_sklad_qty }}</div>
             </td>
             <td>
+                {% if item.min_sup_price %}
                 <div class="price-tag" style="color:var(--warning-color)">{{ item.min_sup_price }}</div>
                 <div class="qty-tag">{{ item.min_sup_supplier }} ({{ item.min_sup_qty }})</div>
-            </td>
-            <td>
-                {% set sups = item.suppliers_json | fromjson %}
-                {% for s in sups %}
-                {% if s.price > 0 %}
-                <div class="supplier-block">
-                    <span class="supplier-name">{{ s.supplier }}</span>
-                    {% if s.supplier_sku %}
-                    <span class="supplier-sku">[{{ s.supplier_sku }}]</span>
-                    {% endif %}
-                    : <b>{{ s.price }}</b>
-                    <span class="qty-tag">({{ s.qty }})</span>
-                    {% if s.product_name %}
-                    <br><span class="supplier-prod-name">{{ s.product_name }}</span>
-                    {% endif %}
-                </div>
+                {% else %}
+                <span class="muted">No competitors</span>
                 {% endif %}
-                {% endfor %}
             </td>
             <td>
-                <a href="/ui/history?sku={{ item.sku | urlencode }}">History</a>
+                <a href="/ui/history?sku={{ item.sku | urlencode }}">Graph</a>
+            </td>
+        </tr>
+        <tr class="details-row">
+            <td colspan="6" style="padding: 0 10px 15px 10px; border-bottom: 2px solid var(--border-color);">
+                <table class="suppliers-table"
+                    style="margin-top: 5px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                    <thead>
+                        <tr>
+                            <th style="font-size: 11px; padding: 4px 8px;">Supplier</th>
+                            <th style="font-size: 11px; padding: 4px 8px;">Supplier SKU</th>
+                            <th style="font-size: 11px; padding: 4px 8px;">Product Name (Supplier)</th>
+                            <th style="font-size: 11px; padding: 4px 8px;">Price</th>
+                            <th style="font-size: 11px; padding: 4px 8px;">Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set sups = item.suppliers_json | fromjson %}
+                        {% for s in sups %}
+                        <tr>
+                            <td class="supplier-name" style="padding: 4px 8px;">{{ s.supplier }}</td>
+                            <td class="mono" style="font-size: 12px; padding: 4px 8px;">{{ s.supplier_sku or '-' }}</td>
+                            <td class="supplier-prod-name" style="padding: 4px 8px;">{{ s.product_name or '-' }}</td>
+                            <td style="padding: 4px 8px;"><b>{{ s.price }}</b> <small>{{ s.currency }}</small></td>
+                            <td class="qty-tag" style="padding: 4px 8px;">{{ s.qty }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </td>
         </tr>
         {% endfor %}
@@ -87,18 +103,43 @@
 </div>
 {% else %}
 <div style="text-align:center; padding: 40px; color: #666;">
-    Enter search query to begin or check status.
+    Enter search query to begin.
 </div>
 {% endif %}
 
 <script>
-    function triggerReload() {
+    let searchTimeout = null;
+    const searchInput = document.getElementById('searchInput');
+    const searchForm = document.getElementById('searchForm');
+
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchForm.submit();
+        }, 500); // 500ms debounce
+    });
+
+    function triggerReload(e) {
+        if (e) e.preventDefault();
         if (!confirm("Start background worker reload?")) return;
+
+        const btn = e.target;
+        const oldText = btn.innerText;
+        btn.innerText = "[Reloading...]";
+        btn.style.opacity = "0.5";
+
         fetch('/api/reload')
             .then(r => r.json())
             .then(d => {
-                if (d.ok) alert("Reload started/finished!");
+                btn.innerText = oldText;
+                btn.style.opacity = "1";
+                if (d.ok) alert("Reload finished successfully!");
                 else alert("Error: " + d.error);
+            })
+            .catch(err => {
+                btn.innerText = oldText;
+                btn.style.opacity = "1";
+                alert("Network error: " + err);
             });
     }
 </script>

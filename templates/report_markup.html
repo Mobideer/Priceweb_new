@@ -28,8 +28,50 @@
             <option value="0" {% if in_stock_only==0 %}selected{% endif %}>No</option>
         </select>
     </div>
+    <div>
+        <label>Qty Supplier = Our Qty</label>
+        <select name="qty_equal">
+            <option value="0" {% if qty_equal==0 %}selected{% endif %}>No</option>
+            <option value="1" {% if qty_equal==1 %}selected{% endif %}>Yes</option>
+        </select>
+    </div>
+
+    <div style="flex: 1 1 100%;">
+        <details class="supbox" {% if exclude_list %}open{% endif %}
+            style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; background: var(--header-bg);">
+            <summary style="cursor: pointer; font-size: 13px;">
+                Exclude Suppliers ({{ exclude_list|length }}) — click to toggle
+            </summary>
+            <div style="margin-top: 10px;">
+                <input id="supSearch" type="text" placeholder="Filter suppliers..."
+                    style="width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+                <div id="supGrid"
+                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px;">
+                    {% for s in suppliers_all %}
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;"
+                        data-supplier="{{ s|lower }}">
+                        <input type="checkbox" name="exclude" value="{{ s }}" {% if s.lower() in exclude_set %}checked{%
+                            endif %}>
+                        <span>{{ s }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </details>
+    </div>
+
     <button type="submit" class="primary">Update</button>
 </form>
+
+<script>
+    document.getElementById('supSearch')?.addEventListener('input', function (e) {
+        const q = e.target.value.toLowerCase();
+        document.querySelectorAll('#supGrid [data-supplier]').forEach(el => {
+            const name = el.getAttribute('data-supplier');
+            el.style.display = name.includes(q) ? 'flex' : 'none';
+        });
+    });
+</script>
 
 <table>
     <thead>
