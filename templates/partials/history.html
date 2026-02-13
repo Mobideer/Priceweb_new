@@ -1,63 +1,60 @@
-{% extends "base.html" %}
-
-{% block title %}History: {{ sku }} - PriceWeb New{% endblock %}
-
-{% block content %}
 <h2>Price History: <span class="mono">{{ sku }}</span></h2>
 
-<form class="toolbar" method="get">
+<form class="toolbar" method="get" onsubmit="event.preventDefault(); showHistory('{{ sku }}', this.days.value)">
     <input type="hidden" name="sku" value="{{ sku }}">
     <label>Days:</label>
-    <select name="days" onchange="this.form.submit()">
+    <select name="days" onchange="showHistory('{{ sku }}', this.value)">
         <option value="7" {% if days==7 %}selected{% endif %}>7 Days</option>
         <option value="30" {% if days==30 %}selected{% endif %}>30 Days</option>
         <option value="90" {% if days==90 %}selected{% endif %}>90 Days</option>
     </select>
-    <a href="/" style="margin-left:auto; padding:8px;">← Back to Dashboard</a>
 </form>
 
-<div class="chart-container">
-    <canvas id="historyChart"></canvas>
+<div class="chart-container"
+    style="background: var(--header-bg); padding: 15px; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 20px;">
+    <canvas id="historyChart-{{ sku }}"></canvas>
 </div>
 
-<table>
+<table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
     <thead>
         <tr>
-            <th>Date</th>
-            <th>Our Price</th>
-            <th>Min Supplier Price</th>
+            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Date</th>
+            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Our Price</th>
+            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Min Supplier
+                Price</th>
         </tr>
     </thead>
     <tbody>
         {% for item in items %}
         <tr>
-            <td>{{ item.day_date }}</td>
-            <td>{{ item.our_price }}</td>
-            <td>{{ item.min_sup_price }}</td>
+            <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.day_date }}</td>
+            <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.our_price }}</td>
+            <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.min_sup_price }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
 <script>
-    const ctx = document.getElementById('historyChart').getContext('2d');
-    const data = {
-        labels: [{% for i in items %}'{{ i.day_date }}', {% endfor %}],
+    (function () {
+        const ctx = document.getElementById('historyChart-{{ sku }}').getContext('2d');
+        const data = {
+            labels: [{% for i in items %}'{{ i.day_date }}', {% endfor %}],
     datasets: [
         {
             label: 'Our Price',
-            data: [{% for i in items %}{{ i.our_price }}, {% endfor %}],
+            data: [{% for i in items %}{{ i.our_price or 'null' }}, {% endfor %}],
         borderColor: '#58a6ff',
             tension: 0.1
-        },
+                },
     {
         label: 'Min Supplier Price',
-            data: [{% for i in items %} { { i.min_sup_price } }, {% endfor %}],
+            data: [{% for i in items %} { { i.min_sup_price or 'null' } }, {% endfor %}],
     borderColor: '#d29922',
         tension: 0.1
-        }
-    ]
-};
+                }
+            ]
+        };
 
     const config = {
         type: 'line',
@@ -83,5 +80,5 @@
     };
 
     new Chart(ctx, config);
+    }) ();
 </script>
-{% endblock %}

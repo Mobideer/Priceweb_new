@@ -38,12 +38,13 @@
                 <th style="text-align: right;">Наша цена</th>
                 <th style="text-align: right;">Мой Склад</th>
                 <th style="text-align: right;">Поставщик</th>
-                <th style="text-align: center;">История</th>
+                <th style="text-align: center;"></th>
             </tr>
         </thead>
         <tbody id="resultsBody">
             {% for item in items %}
-            <tr class="product-row" style="background: rgba(255,255,255,0.05);">
+            <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;"
+                onclick="toggleDetails('{{ item.sku }}')">
                 <td>
                     <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">{{
                         item.name }}</div>
@@ -66,15 +67,20 @@
                     <div style="font-size: 0.8em; opacity: 0.7;">{{ item.min_sup_supplier or '-' }}</div>
                 </td>
                 <td style="text-align: center; vertical-align: middle;">
-                    <button class="btn-action" onclick="showHistory('{{ item.sku }}')"
-                        style="background: transparent; border: 1px solid var(--accent-color); color: var(--accent-color); cursor: pointer; border-radius: 4px; padding: 4px 8px;">История</button>
-                    <button class="btn-action" onclick="toggleDetails('{{ item.sku }}')"
-                        style="margin-left: 5px; background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
+                    <button class="btn-action"
+                        style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
                 </td>
             </tr>
             <tr id="details-{{ item.sku }}" class="details-row" style="display: none;">
                 <td colspan="5"
                     style="padding: 10px 20px; border-bottom: 2px solid var(--border-color); background: rgba(0,0,0,0.1);">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="margin: 0; opacity: 0.8;">Список предложений</h4>
+                        <button class="btn-action" onclick="showHistory('{{ item.sku }}')"
+                            style="background: var(--bg-card); border: 1px solid var(--accent-color); color: var(--accent-color); cursor: pointer; border-radius: 4px; padding: 6px 12px; font-weight: bold;">📊
+                            Показать историю цен</button>
+                    </div>
                     <table class="suppliers-table" style="width: 100%; border-collapse: collapse;">
                         <thead>
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
@@ -85,26 +91,41 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% set suppliers = item.suppliers_json|fromjson %}
-                            {# Sort by price ascending, filter out My Sklad #}
-                            {% for s in suppliers|sort(attribute='price') %}
+                            {% set raw_suppliers = item.suppliers_json|fromjson %}
+                            {# Filter out My Sklad #}
+                            {% set filtered_sups = [] %}
+                            {% for s in raw_suppliers %}
                             {% if s.supplier.lower() != 'мой склад' %}
+                            {% set _ = filtered_sups.append(s) %}
+                            {% endif %}
+                            {% endfor %}
+
+                            {# Sorting: In-stock first, then price #}
+                            {% set in_stock = filtered_sups|selectattr('qty', 'gt', 0)|sort(attribute='price') %}
+                            {% set out_of_stock = filtered_sups|selectattr('qty', 'le', 0)|sort(attribute='price') %}
+
+                            {% for s in in_stock + out_of_stock %}
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                                 <td style="padding: 6px 8px;">{{ s.supplier }}</td>
                                 <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">{{
                                     s.supplier_sku }}</td>
-                                <td style="padding: 6px 8px; text-align: right; font-weight: bold;">{{ s.price }} <span
-                                        style="font-size: 0.8em; opacity: 0.6;">{{ s.currency }}</span></td>
+                                <td style="padding: 6px 8px; text-align: right; font-weight: bold;">
+                                    {% if s.currency != 'RUB' %}
+                                    <span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">{{
+                                        s.original_price }} {{ s.currency }}</span>
+                                    <span style="margin: 0 4px; opacity: 0.5;">→</span>
+                                    {% endif %}
+                                    {{ s.price }} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>
+                                </td>
                                 <td
                                     style="padding: 6px 8px; text-align: right; color: {% if s.qty > 0 %}#4caf50{% else %}#f44336{% endif %};">
                                     {{ s.qty }}
                                 </td>
                             </tr>
-                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
-                    <div id="history-{{ item.sku }}" style="margin-top: 15px;"></div>
+                    <div id="history-{{ item.sku }}" style="margin-top: 15px; display: none;"></div>
                 </td>
             </tr>
             {% endfor %}
@@ -143,26 +164,37 @@
         let html = '';
         items.forEach(item => {
             let suppliers = JSON.parse(item.suppliers_json);
-            // Sort suppliers by price property
-            suppliers.sort((a, b) => a.price - b.price);
+
+            // Filter My Sklad
+            suppliers = suppliers.filter(s => s.supplier.toLowerCase() !== 'мой склад');
+
+            // Complex Sorting: Qty > 0 first, then Price
+            suppliers.sort((a, b) => {
+                const aStock = a.qty > 0 ? 1 : 0;
+                const bStock = b.qty > 0 ? 1 : 0;
+                if (aStock !== bStock) return bStock - aStock; // Descending stock status
+                return a.price - b.price; // Ascending price
+            });
 
             let suppliersHtml = '';
             suppliers.forEach(s => {
-                if (s.supplier.toLowerCase() !== 'мой склад') {
-                    suppliersHtml += `
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <td style="padding: 6px 8px;">${s.supplier}</td>
-                            <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">${s.supplier_sku || ''}</td>
-                            <td style="padding: 6px 8px; text-align: right; font-weight: bold;">${s.price} <span style="font-size: 0.8em; opacity: 0.6;">${s.currency || 'RUB'}</span></td>
-                            <td style="padding: 6px 8px; text-align: right; color: ${s.qty > 0 ? '#4caf50' : '#f44336'};">
-                                ${s.qty}
-                            </td>
-                        </tr>`;
-                }
+                const priceDisplay = s.currency !== 'RUB'
+                    ? `<span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">${s.original_price} ${s.currency}</span> <span style="margin: 0 4px; opacity: 0.5;">→</span> ${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`
+                    : `${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`;
+
+                suppliersHtml += `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: 6px 8px;">${s.supplier}</td>
+                        <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">${s.supplier_sku || ''}</td>
+                        <td style="padding: 6px 8px; text-align: right; font-weight: bold;">${priceDisplay}</td>
+                        <td style="padding: 6px 8px; text-align: right; color: ${s.qty > 0 ? '#4caf50' : '#f44336'};">
+                            ${s.qty}
+                        </td>
+                    </tr>`;
             });
 
             html += `
-                <tr class="product-row" style="background: rgba(255,255,255,0.05);">
+                <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;" onclick="toggleDetails('${item.sku}')">
                     <td>
                         <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">${item.name}</div>
                         <div style="font-size: 0.85em; opacity: 0.7;">SKU: ${item.sku}</div>
@@ -182,12 +214,16 @@
                         <div style="font-size: 0.8em; opacity: 0.7;">${item.min_sup_supplier || '-'}</div>
                     </td>
                     <td style="text-align: center; vertical-align: middle;">
-                        <button class="btn-action" onclick="showHistory('${item.sku}')" style="background: transparent; border: 1px solid var(--accent-color); color: var(--accent-color); cursor: pointer; border-radius: 4px; padding: 4px 8px;">История</button>
-                        <button class="btn-action" onclick="toggleDetails('${item.sku}')" style="margin-left: 5px; background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
+                        <button class="btn-action" style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
                     </td>
                 </tr>
                 <tr id="details-${item.sku}" class="details-row" style="display: none;">
                     <td colspan="5" style="padding: 10px 20px; border-bottom: 2px solid var(--border-color); background: rgba(0,0,0,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="margin: 0; opacity: 0.8;">Список предложений</h4>
+                            <button class="btn-action" onclick="showHistory('${item.sku}')"
+                                style="background: var(--bg-card); border: 1px solid var(--accent-color); color: var(--accent-color); cursor: pointer; border-radius: 4px; padding: 6px 12px; font-weight: bold;">📊 Показать историю цен</button>
+                        </div>
                         <table class="suppliers-table" style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
@@ -201,7 +237,7 @@
                                 ${suppliersHtml}
                             </tbody>
                         </table>
-                        <div id="history-${item.sku}" style="margin-top: 15px;"></div>
+                        <div id="history-${item.sku}" style="margin-top: 15px; display: none;"></div>
                     </td>
                 </tr>`;
         });
@@ -213,16 +249,27 @@
         row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
     }
 
-    function showHistory(sku) {
+    function showHistory(sku, days = 7) {
         const container = document.getElementById('history-' + sku);
         const detailsRow = document.getElementById('details-' + sku);
-        detailsRow.style.display = 'table-row';
 
-        container.innerHTML = 'Loading history...';
-        fetch('/ui/history?sku=' + encodeURIComponent(sku))
+        // If simple toggle off
+        if (container.style.display === 'block' && arguments.length === 1) {
+            container.style.display = 'none';
+            return;
+        }
+
+        detailsRow.style.display = 'table-row';
+        container.style.display = 'block';
+        container.innerHTML = '<div style="padding: 20px; text-align: center; opacity: 0.7;">Загрузка истории...</div>';
+
+        fetch(`/ui/history?sku=${encodeURIComponent(sku)}&days=${days}`)
             .then(r => r.text())
             .then(html => {
                 container.innerHTML = html;
+            })
+            .catch(err => {
+                container.innerHTML = '<div style="color: #f44336; padding: 10px;">Ошибка загрузки: ' + err + '</div>';
             });
     }
 
