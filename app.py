@@ -206,7 +206,8 @@ def report_spread():
                 'max_price': max_p,
                 'max_suppliers': ", ".join(max_s_names),
                 'spread_pct': round(spread, 2),
-                'suppliers_cnt': len(valid_sups)
+                'suppliers_cnt': len(valid_sups),
+                'suppliers_json': r['suppliers_json']
             })
             
         results.sort(key=lambda x: x['spread_pct'], reverse=True)
@@ -298,7 +299,8 @@ def report_markup():
                     'min_suppliers': ", ".join(min_s_names),
                     'our_price_with_markup': round(our_with_markup, 2),
                     'delta_abs': round(delta_abs, 2),
-                    'delta_pct': round(delta_pct, 2)
+                    'delta_pct': round(delta_pct, 2),
+                    'suppliers_json': r['suppliers_json']
                 })
         
         results.sort(key=lambda x: x['delta_abs'], reverse=True)
