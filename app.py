@@ -324,9 +324,24 @@ def report_markup():
 
 @app.route('/api/reload')
 def api_reload():
+    import sys
     try:
-        subprocess.run([sys.executable, "worker.py"], check=True, timeout=120)
+        # Increased timeout for large datasets (74k+ items)
+        # and added capture_output to see the actual error
+        result = subprocess.run(
+            [sys.executable, "worker.py"], 
+            check=True, 
+            timeout=600,
+            capture_output=True,
+            text=True
+        )
         return jsonify({"ok": True})
+    except subprocess.CalledProcessError as e:
+        # Return the actual error from worker.py stderr
+        error_msg = e.stderr or str(e)
+        return jsonify({"ok": False, "error": f"Worker failed: {error_msg}"})
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Worker timed out (max 10 mins)"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
