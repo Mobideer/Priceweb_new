@@ -12,3 +12,4 @@ data.json
 # local data
 /data/
 *.sqlite
+data/priceweb.sqlite
