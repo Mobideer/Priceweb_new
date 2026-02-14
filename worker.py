@@ -10,6 +10,19 @@ JSON_URL = os.environ.get("PRICE_JSON_URL", "https://app.price-matrix.ru/WebApi/
 SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
 LOCAL_DATA_FILE = "data.json"
 
+def log_with_timestamp(message):
+    """Print message with timestamp in Moscow timezone."""
+    try:
+        import pytz
+        from datetime import datetime
+        tz = pytz.timezone('Europe/Moscow')
+        timestamp = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[{timestamp}] {message}")
+    except:
+        # Fallback if pytz is not available
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[{timestamp}] {message}")
+
 def get_exchange_rates():
     """Fetches current exchange rates (USD, EUR -> RUB) with fallbacks."""
     rates = {"USD": 92.0, "EUR": 100.0, "RUB": 1.0}
@@ -26,7 +39,7 @@ def get_exchange_rates():
                 if eur_usd:
                     rates["EUR"] = usd_rub / eur_usd
     except Exception as e:
-        print(f"Warning: Could not fetch real-time exchange rates: {e}. Using default values.")
+        log_with_timestamp(f"Warning: Could not fetch real-time exchange rates: {e}. Using default values.")
     return rates
 
 def process_single_product(p, rates):
@@ -127,7 +140,7 @@ def run():
     t0 = time.time()
     
     rates = get_exchange_rates()
-    print(f"Current Rates: {rates}")
+    log_with_timestamp(f"Current Rates: {rates}")
     
     total_count = 0
     inserted = 0
@@ -146,11 +159,11 @@ def run():
             cur_snap = conn.cursor()
 
             if os.path.exists(LOCAL_DATA_FILE):
-                print(f"Reading from local file: {LOCAL_DATA_FILE}")
+                log_with_timestamp(f"Reading from local file: {LOCAL_DATA_FILE}")
                 f = open(LOCAL_DATA_FILE, 'r', encoding='utf-8')
                 objects = ijson.items(f, 'catalog.item.products.item')
             else:
-                print(f"Fetching from URL: {JSON_URL}")
+                log_with_timestamp(f"Fetching from URL: {JSON_URL}")
                 resp = requests.get(JSON_URL, stream=True, timeout=300)
                 resp.raise_for_status()
                 objects = ijson.items(resp.raw, 'catalog.item.products.item')
@@ -158,7 +171,7 @@ def run():
             for p in objects:
                 total_count += 1
                 if total_count % 1000 == 0:
-                    print(f"Processed {total_count} items...")
+                    log_with_timestamp(f"Processed {total_count} items...")
 
                 it = process_single_product(p, rates)
                 if not it:
@@ -249,7 +262,7 @@ def run():
                 pass
 
             notify.notify_success(stats)
-            print(json.dumps(stats))
+            log_with_timestamp(json.dumps(stats))
 
         finally:
             conn.close()
