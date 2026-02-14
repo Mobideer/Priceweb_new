@@ -47,7 +47,9 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
     }
     
     try:
-        requests.post(url, data=payload, timeout=10)
+        resp = requests.post(url, data=payload, timeout=10)
+        if not resp.ok:
+            print(f"[TG_NOTIFY] Telegram API Error: {resp.status_code} - {resp.text}")
     except Exception as e:
         print(f"[TG_NOTIFY] Failed to send message: {e}")
 
