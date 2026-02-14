@@ -95,21 +95,19 @@ def _get_status():
 
 def _search_items(q: str, limit: int = 20):
     q = (q or "").strip().lower()
-    if not q:
-        return {"items": []}
-        
     conn = db.get_connection()
     try:
-        # Simple search for now: sku match or name match
-        # Optimized for "starts with" then "contains"
-        # priceweb used a complex scoring in python memory. 
-        # We'll use SQL LIKE for simplicity and speed on large dataset without full load
-        
+        if not q:
+            # Show newest items by default
+            rows = conn.execute("SELECT * FROM items_latest ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+            return {"items": [dict(r) for r in rows]}
+            
+        # Simple search matching logic
         # Priority 1: Exact SKU
-        rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ?", (q,)).fetchall()
+        rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ? ORDER BY created_at DESC", (q,)).fetchall()
         if not rows:
              # Priority 2: SKU starts with
-            rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? LIMIT ?", (q + '%', limit)).fetchall()
+            rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? ORDER BY created_at DESC LIMIT ?", (q + '%', limit)).fetchall()
         
         if len(rows) < limit:
             # Priority 3: Name contains
@@ -120,7 +118,7 @@ def _search_items(q: str, limit: int = 20):
             
             # Use a simple LIKE
             cursor = conn.execute(
-                f"SELECT * FROM items_latest WHERE lower(name) LIKE ? AND sku NOT IN ({placeholders}) LIMIT ?",
+                f"SELECT * FROM items_latest WHERE lower(name) LIKE ? AND sku NOT IN ({placeholders}) ORDER BY created_at DESC LIMIT ?",
                 (f'%{q}%', *found_skus, rem)
             )
             rows.extend(cursor.fetchall())

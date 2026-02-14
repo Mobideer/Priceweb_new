@@ -38,12 +38,22 @@ def ensure_schema() -> None:
                 min_sup_supplier TEXT,
                 
                 suppliers_json TEXT,
-                updated_at INTEGER
+                updated_at INTEGER,
+                created_at INTEGER
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_name ON items_latest(name);")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_updated_at ON items_latest(updated_at);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_created_at ON items_latest(created_at);")
 
+        # Migration: Add created_at if missing
+        try:
+            conn.execute("ALTER TABLE items_latest ADD COLUMN created_at INTEGER;")
+            # Initialize existing items with updated_at as fallback
+            conn.execute("UPDATE items_latest SET created_at = updated_at WHERE created_at IS NULL;")
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+        
         # item_snapshots: Daily history
         conn.execute("""
             CREATE TABLE IF NOT EXISTS item_snapshots (
@@ -81,7 +91,8 @@ def load_existing_latest(conn: sqlite3.Connection) -> Dict[str, Tuple]:
         SELECT sku, name, suppliers_json, 
                our_price, our_qty, 
                my_sklad_price, my_sklad_qty, 
-               min_sup_price, min_sup_qty, min_sup_supplier
+               min_sup_price, min_sup_qty, min_sup_supplier,
+               created_at
         FROM items_latest
     """)
     out = {}
@@ -112,3 +123,5 @@ def get_db_status() -> Dict[str, Any]:
         return {"ok": False, "error": str(e)}
     finally:
         conn.close()
+
+    return {"ok": False, "error": "Unknown error"} # Should not reach here

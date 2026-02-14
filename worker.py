@@ -140,6 +140,7 @@ def run():
         conn = db.get_connection()
         try:
             existing = db.load_existing_latest(conn)
+            new_item_names = []
             conn.execute("BEGIN")
             cur_upsert = conn.cursor()
             cur_snap = conn.cursor()
@@ -175,7 +176,10 @@ def run():
                 
                 prev = existing.get(sku)
                 is_new = prev is None
-                is_changed = (prev != curr_vals) if not is_new else True
+                # curr_vals has 9 elements, prev in old schema had 9, 
+                # but load_existing_latest now returns 10 (incl created_at)
+                # Let's compare only the first 9 elements (sku data)
+                is_changed = (prev[:9] != curr_vals) if not is_new else True
                 
                 if is_new or is_changed:
                     cur_snap.execute("""
@@ -195,13 +199,15 @@ def run():
                     cur_upsert.execute("""
                         INSERT INTO items_latest 
                         (sku, name, our_price, our_qty, my_sklad_price, my_sklad_qty,
-                         min_sup_price, min_sup_qty, min_sup_supplier, suppliers_json, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         min_sup_price, min_sup_qty, min_sup_supplier, suppliers_json, updated_at, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (sku, it['name'], it['our_price'], it['our_qty'],
                           it['my_sklad_price'], it['my_sklad_qty'],
                           it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier'],
-                          supp_json, ts))
+                          supp_json, ts, ts))
                     inserted += 1
+                    if len(new_item_names) < 10:
+                        new_item_names.append(it['name'])
                 elif is_changed:
                     cur_upsert.execute("""
                         UPDATE items_latest SET
@@ -228,7 +234,8 @@ def run():
                 "inserted": inserted,
                 "changed": changed,
                 "snapshots_added": snap_added,
-                "duration": time.time() - t0
+                "duration": time.time() - t0,
+                "new_items": new_item_names
             }
             
             # Add DB stats

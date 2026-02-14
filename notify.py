@@ -65,6 +65,15 @@ def notify_success(stats: dict) -> None:
         f"Snapshots: <b>{stats.get('snapshots_added', 0)}</b>\n"
         f"Time: <b>{stats.get('duration', 0):.2f}s</b>"
     )
+    
+    new_items = stats.get('new_items', [])
+    if new_items:
+        msg += "\n\n🆕 <b>New items:</b>\n"
+        for name in new_items[:10]:
+            msg += f"• {name}\n"
+        if len(new_items) > 10:
+            msg += "<i>...and more</i>"
+            
     send(msg)
 
 def notify_fail(error: str) -> None:
