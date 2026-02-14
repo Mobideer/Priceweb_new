@@ -1,11 +1,27 @@
 import os
 import requests
 import time
+from datetime import datetime
 from typing import Optional
+try:
+    import pytz
+except ImportError:
+    pytz = None
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
 TG_SILENT = os.environ.get("TG_SILENT", "0") == "1"
+TIMEZONE = os.environ.get("TZ", "Europe/Moscow")
+
+def get_now_str() -> str:
+    """Returns current time string in configured timezone."""
+    if pytz:
+        try:
+            tz = pytz.timezone(TIMEZONE)
+            return datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            pass
+    return time.strftime('%Y-%m-%d %H:%M:%S')
 
 def send(text: str, alert_key: Optional[str] = None) -> None:
     """
@@ -36,7 +52,7 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
         print(f"[TG_NOTIFY] Failed to send message: {e}")
 
 def notify_start(host: str) -> None:
-    send(f"🚀 <b>PriceWeb New Worker</b>\nHost: <code>{host}</code>\nStarted: <code>{time.strftime('%Y-%m-%d %H:%M:%S')}</code>")
+    send(f"🚀 <b>PriceWeb New Worker</b>\nHost: <code>{host}</code>\nStarted: <code>{get_now_str()}</code>")
 
 def notify_success(stats: dict) -> None:
     msg = (

@@ -5,8 +5,14 @@ import sqlite3
 import threading
 import subprocess
 import sys
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
 
 from flask import Flask, render_template, request, jsonify, abort, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -65,7 +71,16 @@ def strip_filter(s):
 def format_ts_filter(ts):
     if not ts:
         return ""
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(ts)))
+    try:
+        tz_name = os.environ.get("TZ", "Europe/Moscow")
+        if pytz:
+            tz = pytz.timezone(tz_name)
+            # datetime.fromtimestamp using UTC and then converting to target TZ
+            return datetime.fromtimestamp(int(ts), tz=pytz.UTC).astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(ts)))
+    except:
+        return str(ts)
 
 @app.template_filter('fromjson')
 def fromjson_filter(s):
