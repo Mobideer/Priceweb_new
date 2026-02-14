@@ -148,9 +148,7 @@ def index():
     limit = request.args.get('limit', 20, type=int)
     
     status = _get_status()
-    results = {"items": []}
-    if q:
-        results = _search_items(q, limit)
+    results = _search_items(q, limit)
 
     return render_template('index.html', 
                            q=q, 

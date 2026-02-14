@@ -43,7 +43,6 @@ def ensure_schema() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_items_name ON items_latest(name);")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_created_at ON items_latest(created_at);")
 
         # Migration: Add created_at if missing
         try:
@@ -53,6 +52,8 @@ def ensure_schema() -> None:
         except sqlite3.OperationalError:
             # Column already exists
             pass
+        
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_items_created_at ON items_latest(created_at);")
         
         # item_snapshots: Daily history
         conn.execute("""
