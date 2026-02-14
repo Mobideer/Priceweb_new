@@ -19,6 +19,9 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 
 import db
 
+# Ensure database schema is up to date on start (runs even under gunicorn)
+db.ensure_schema()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
 

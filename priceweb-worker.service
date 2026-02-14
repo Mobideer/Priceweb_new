@@ -3,10 +3,16 @@ Description=PriceWeb Data Worker
 After=network.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=root
+Group=root
 WorkingDirectory=/opt/priceweb_new
-ExecStart=/bin/bash /opt/priceweb_new/run_worker.sh
+# IMPORTANT: Put your real Telegram tokens here if not using env vars!
+Environment="TG_BOT_TOKEN=ВАШ_ТОКЕН"
+Environment="TG_CHAT_ID=ВАШ_ID"
+Environment="PRICE_DB_PATH=/opt/priceweb_new/data/priceweb.sqlite"
+Environment="TZ=Europe/Moscow"
+ExecStart=/opt/priceweb_new/venv/bin/python /opt/priceweb_new/worker.py
 StandardOutput=append:/opt/priceweb_new/cron_log.log
 StandardError=append:/opt/priceweb_new/cron_log.log
 

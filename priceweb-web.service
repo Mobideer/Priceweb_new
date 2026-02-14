@@ -1,0 +1,23 @@
+[Unit]
+Description=PriceWeb Flask Web Application
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/priceweb_new
+Environment="PATH=/opt/priceweb_new/venv/bin"
+Environment="PRICE_DB_PATH=/opt/priceweb_new/data/priceweb.sqlite"
+Environment="PRICE_LOG_PATH=/opt/priceweb_new/cron_log.log"
+Environment="TZ=Europe/Moscow"
+ExecStart=/opt/priceweb_new/venv/bin/gunicorn \
+    --workers 3 \
+    --bind 0.0.0.0:5002 \
+    --access-logfile /opt/priceweb_new/access.log \
+    --error-logfile /opt/priceweb_new/error.log \
+    app:app
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
