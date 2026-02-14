@@ -403,10 +403,17 @@ def api_reload():
 @app.route('/api/logs')
 @login_required
 def api_logs():
-    log_path = os.environ.get("PRICE_LOG_PATH", "cron_log.log")
+    # Try environment variable first, then fallback to absolute path based on DB location
+    log_path = os.environ.get("PRICE_LOG_PATH")
+    if not log_path:
+        # Derive log path from database path
+        db_dir = os.path.dirname(db.DB_PATH) or '.'
+        log_path = os.path.join(db_dir, "cron_log.log")
+    
     try:
         if not os.path.exists(log_path):
             return jsonify({"ok": False, "error": f"Log file not found at {log_path}"})
+
         
         with open(log_path, 'r') as f:
             # Get last 100 lines
