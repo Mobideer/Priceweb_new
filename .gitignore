@@ -8,3 +8,7 @@ data.json
 # local data
 /data/
 *.sqlite
+
+# local data
+/data/
+*.sqlite
