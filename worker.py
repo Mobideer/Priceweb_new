@@ -151,7 +151,7 @@ def run():
                 objects = ijson.items(f, 'catalog.item.products.item')
             else:
                 print(f"Fetching from URL: {JSON_URL}")
-                resp = requests.get(JSON_URL, stream=True, timeout=120)
+                resp = requests.get(JSON_URL, stream=True, timeout=300)
                 resp.raise_for_status()
                 objects = ijson.items(resp.raw, 'catalog.item.products.item')
 
