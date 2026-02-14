@@ -1,0 +1,10 @@
+[Unit]
+Description=Run PriceWeb Worker every 6 hours
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+Unit=priceweb-worker.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=PriceWeb Data Worker
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/priceweb_new
+ExecStart=/bin/bash /opt/priceweb_new/run_worker.sh
+StandardOutput=append:/opt/priceweb_new/cron_log.log
+StandardError=append:/opt/priceweb_new/cron_log.log
+
+[Install]
+WantedBy=multi-user.target

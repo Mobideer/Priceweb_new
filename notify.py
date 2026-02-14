@@ -57,8 +57,10 @@ def notify_start(host: str) -> None:
 def notify_success(stats: dict) -> None:
     msg = (
         "✅ <b>PriceWeb New Worker Success</b>\n"
-        f"Items: <b>{stats.get('total', 0)}</b>\n"
-        f"Inserted: <b>{stats.get('inserted', 0)}</b>\n"
+        f"Items processed: <b>{stats.get('total', 0)}</b>\n"
+        f"DB Total Items: <b>{stats.get('items_db', 0)}</b>\n"
+        f"DB Size: <b>{stats.get('db_size_mb', 0):.2f} MB</b>\n"
+        f"Inserted: <b>{stats.get('inserted', 0)}</b> | "
         f"Changed: <b>{stats.get('changed', 0)}</b>\n"
         f"Snapshots: <b>{stats.get('snapshots_added', 0)}</b>\n"
         f"Time: <b>{stats.get('duration', 0):.2f}s</b>"

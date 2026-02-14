@@ -16,7 +16,27 @@
         <button id="reloadBtn" onclick="triggerReload(event)"
             style="margin-left: 10px; cursor: pointer; background: var(--bg-card); color: var(--accent-color); border: 1px solid var(--accent-color); border-radius: 4px; padding: 2px 8px; font-size: 11px;">Reload
             Data</button>
+        <button onclick="showLogs()"
+            style="margin-left: 5px; cursor: pointer; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 8px; font-size: 11px;">View
+            Logs</button>
         <span id="reloadStatus" style="font-size: 11px; margin-left: 5px;"></span>
+    </div>
+</div>
+
+<!-- Log Modal -->
+<div id="logModal" class="modal"
+    style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.7); backdrop-filter: blur(4px);">
+    <div
+        style="background:var(--bg-card); margin: 5% auto; padding: 20px; border: 1px solid var(--border-color); width: 80%; max-width: 900px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3 style="margin:0;">Worker Logs (Last 100 lines)</h3>
+            <span onclick="closeLogs()" style="cursor:pointer; font-size:24px; opacity:0.6;">&times;</span>
+        </div>
+        <pre id="logContent"
+            style="background:#000; color:#0f0; padding:15px; border-radius:4px; max-height:500px; overflow-y:auto; font-family:monospace; font-size:12px; white-space:pre-wrap;"></pre>
+        <div style="text-align:right; margin-top:15px;">
+            <button onclick="closeLogs()" class="primary">Close</button>
+        </div>
     </div>
 </div>
 
@@ -306,6 +326,32 @@
                 status.innerText = "Network error";
                 status.style.color = "#f44336";
             });
+    }
+
+    function showLogs() {
+        const modal = document.getElementById('logModal');
+        const content = document.getElementById('logContent');
+        modal.style.display = 'block';
+        content.innerText = 'Loading logs...';
+
+        fetch('/api/logs')
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    content.innerText = d.logs || 'Log file is empty.';
+                    // Scroll to bottom
+                    content.scrollTop = content.scrollHeight;
+                } else {
+                    content.innerText = 'Error loading logs: ' + d.error;
+                }
+            })
+            .catch(err => {
+                content.innerText = 'Network error: ' + err;
+            });
+    }
+
+    function closeLogs() {
+        document.getElementById('logModal').style.display = 'none';
     }
 </script>
 {% endblock %}

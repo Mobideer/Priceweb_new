@@ -230,6 +230,17 @@ def run():
                 "snapshots_added": snap_added,
                 "duration": time.time() - t0
             }
+            
+            # Add DB stats
+            try:
+                db_st = db.get_db_status()
+                stats["items_db"] = db_st.get("items_db", 0)
+                db_path = db_st.get("db_path", "priceweb.db")
+                if os.path.exists(db_path):
+                    stats["db_size_mb"] = os.path.getsize(db_path) / (1024 * 1024)
+            except:
+                pass
+
             notify.notify_success(stats)
             print(json.dumps(stats))
 

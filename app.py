@@ -401,6 +401,22 @@ def api_reload():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
+@app.route('/api/logs')
+@login_required
+def api_logs():
+    log_path = os.environ.get("PRICE_LOG_PATH", "cron_log.log")
+    try:
+        if not os.path.exists(log_path):
+            return jsonify({"ok": False, "error": f"Log file not found at {log_path}"})
+        
+        with open(log_path, 'r') as f:
+            # Get last 100 lines
+            lines = f.readlines()
+            last_lines = lines[-100:]
+            return jsonify({"ok": True, "logs": "".join(last_lines)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5002))
     app.run(host='0.0.0.0', port=port, debug=True)
