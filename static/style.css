@@ -11,6 +11,35 @@
     --hover-bg: #21262d;
     --bg-card: #161b22;
     --text-secondary: #8b949e;
+    --input-bg: #0d1117;
+    --btn-primary-bg: #238636;
+    --btn-primary-text: #ffffff;
+    --btn-primary-border: rgba(240, 246, 252, 0.1);
+    --supplier-sku-color: #58a6ff;
+    --supplier-prod-color: #7d8590;
+    --card-bg-mobile: #161b22;
+}
+
+[data-theme="light"] {
+    --bg-color: #ffffff;
+    --text-color: #24292f;
+    --border-color: #d0d7de;
+    --header-bg: #f6f8fa;
+    --accent-color: #0969da;
+    --success-color: #1a7f37;
+    --warning-color: #9a6700;
+    --danger-color: #cf222e;
+    --table-stripe: #f6f8fa;
+    --hover-bg: #f3f4f6;
+    --bg-card: #ffffff;
+    --text-secondary: #57606a;
+    --input-bg: #ffffff;
+    --btn-primary-bg: #1f883d;
+    --btn-primary-text: #ffffff;
+    --btn-primary-border: rgba(31, 35, 40, 0.15);
+    --supplier-sku-color: #0969da;
+    --supplier-prod-color: #57606a;
+    --card-bg-mobile: #ffffff;
 }
 
 body {
@@ -81,7 +110,7 @@ nav a.active {
 input,
 select,
 button {
-    background-color: var(--bg-color);
+    background-color: var(--input-bg);
     border: 1px solid var(--border-color);
     color: var(--text-color);
     padding: 6px 12px;
@@ -95,13 +124,13 @@ button {
 }
 
 button:hover {
-    border-color: #8b949e;
+    border-color: var(--text-secondary);
 }
 
 button.primary {
-    background-color: #238636;
-    color: #fff;
-    border-color: rgba(240, 246, 252, 0.1);
+    background-color: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-color: var(--btn-primary-border);
 }
 
 /* Tables */
@@ -164,7 +193,7 @@ tr:hover td {
 
 .btn-logs {
     background: var(--success-color);
-    color: white;
+    color: #ffffff;
     border: none;
 }
 
@@ -195,17 +224,17 @@ tr:hover td {
 }
 
 .supplier-name {
-    color: #8b949e;
+    color: var(--text-secondary);
 }
 
 .supplier-sku {
-    color: #58a6ff;
+    color: var(--supplier-sku-color);
     opacity: 0.8;
 }
 
 .supplier-prod-name {
     font-style: italic;
-    color: #7d8590;
+    color: var(--supplier-prod-color);
 }
 
 .delta-pos {
@@ -304,7 +333,7 @@ tr:hover td {
         border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 12px;
-        background: var(--header-bg) !important;
+        background: var(--card-bg-mobile) !important;
     }
 
     td {
