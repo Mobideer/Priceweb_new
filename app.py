@@ -384,7 +384,9 @@ def api_reload():
     
     # Allow if token matches OR user is logged in
     if not (expected_token and token == expected_token) and not current_user.is_authenticated:
-        abort(403)
+        if not expected_token:
+            return jsonify({"ok": False, "error": "RELOAD_TOKEN not set in /etc/priceweb_new.env"}), 403
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
     def run_worker():
         try:
             # Import within thread to avoid global state issues if any

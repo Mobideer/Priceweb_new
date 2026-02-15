@@ -14,9 +14,6 @@ TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
 RELOAD_TOKEN = os.environ.get("RELOAD_TOKEN", "").strip()
 API_PORT = config.get_api_port()
-
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
-TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
 PRICE_LOG_PATH = os.environ.get("PRICE_LOG_PATH", "data/cron_log.log")
 PRICE_DB_PATH = os.environ.get("PRICE_DB_PATH", "data/priceweb.db")
 
@@ -91,21 +88,26 @@ def get_logs_text(lines: int = 50) -> str:
 def trigger_worker() -> str:
     # We trigger via the local API to ensure it runs in the same environment/context
     try:
-        url = f"http://localhost:{API_PORT}/api/reload"
+        # Use 127.0.0.1 to avoid IPv6 issues with 'localhost' in some environments
+        url = f"http://127.0.0.1:{API_PORT}/api/reload"
         params = {}
         if RELOAD_TOKEN:
             params['token'] = RELOAD_TOKEN
             
-        resp = requests.get(url, params=params, timeout=10)
+        # Increased timeout for potentially slow server response
+        resp = requests.get(url, params=params, timeout=30)
         
-        if resp.status_code == 403:
-            return "❌ <b>Ошибка:</b> Доступ запрещен (проверьте RELOAD_TOKEN)."
-            
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            return f"❌ <b>Ошибка:</b> Сервер вернул некорректный ответ (Код: {resp.status_code})."
+
         if data.get('ok'):
             return "✅ <b>Воркер запущен!</b>\nРезультат придет в чат после завершения."
         else:
             return f"❌ <b>Ошибка запуска:</b> {data.get('error')}"
+    except requests.exceptions.Timeout:
+        return f"❌ <b>Таймаут:</b> Сервер не ответил вовремя (30с)."
     except Exception as e:
         return f"❌ <b>Не удалось связаться с API:</b> {e}\n(Убедитесь, что сервер запущен на порту {API_PORT})"
 
