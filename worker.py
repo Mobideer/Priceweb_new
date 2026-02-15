@@ -146,15 +146,16 @@ def rotate_snapshots(conn, now_ts):
 
 def vacuum_db():
     # VACUUM must run on a clean connection without any open transactions.
-    conn = db.get_connection()
-    conn.isolation_level = None  # Autocommit mode
     try:
+        # Give a small moment for other connections to truly finalize
+        time.sleep(0.5)
+        conn = db.get_connection()
+        conn.isolation_level = None  # Autocommit mode
         log_with_timestamp("Reclaiming storage space (VACUUM)...")
         conn.execute("VACUUM")
+        conn.close()
     except Exception as e:
         log_with_timestamp(f"Warning: VACUUM failed: {e}")
-    finally:
-        conn.close()
 
 class StatsHelper:
     def __init__(self):
@@ -282,9 +283,6 @@ def run():
             cur_snap.close()
             conn.close()
             
-            log_with_timestamp("Maintenance stage...")
-            vacuum_db()
-            
             if 'f' in locals():
                 f.close()
 
@@ -318,8 +316,14 @@ def run():
         err_msg = traceback.format_exc()
         log_with_timestamp(f"Worker crashed:\n{err_msg}")
         last_part = err_msg[-200:] if len(err_msg) > 200 else err_msg
-        notify.notify_fail(f"SQL Logic Error or similar:\n{str(e)}\n\nTraceback summary:\n{last_part}")
+        notify.notify_fail(f"Worker Error:\n{str(e)}\n\nTraceback summary:\n{last_part}")
         raise
+    finally:
+        # Run vacuum strictly outside the main connection life-cycle
+        try:
+            vacuum_db()
+        except:
+            pass
 
 if __name__ == "__main__":
     run()

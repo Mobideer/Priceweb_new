@@ -123,17 +123,21 @@ def ensure_schema() -> None:
         conn.close()
 
 def load_existing_latest(conn: sqlite3.Connection) -> Dict[str, Tuple]:
-    cur = conn.execute("""
-        SELECT sku, name, suppliers_json, 
-               our_price, our_qty, 
-               my_sklad_price, my_sklad_qty, 
-               min_sup_price, min_sup_qty, min_sup_supplier,
-               created_at
-        FROM items_latest
-    """)
-    out = {}
-    for row in cur.fetchall():
-        out[row[0]] = row[1:]
+    try:
+        cur = conn.execute("""
+            SELECT sku, name, suppliers_json, 
+                   our_price, our_qty, 
+                   my_sklad_price, my_sklad_qty, 
+                   min_sup_price, min_sup_qty, min_sup_supplier,
+                   created_at
+            FROM items_latest
+        """)
+        out = {}
+        for row in cur.fetchall():
+            out[row[0]] = row[1:]
+    finally:
+        if 'cur' in locals():
+            cur.close()
     return out
 
 def get_db_status() -> Dict[str, Any]:
