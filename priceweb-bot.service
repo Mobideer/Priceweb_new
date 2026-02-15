@@ -8,6 +8,7 @@ User=root
 Group=root
 WorkingDirectory=/opt/priceweb_new
 Environment="PATH=/opt/priceweb_new/venv/bin"
+EnvironmentFile=-/etc/priceweb_new.env
 EnvironmentFile=-/opt/priceweb_new/.env
 # Environmental variables are loaded via .env in the script
 ExecStart=/opt/priceweb_new/venv/bin/python /opt/priceweb_new/tg_bot.py

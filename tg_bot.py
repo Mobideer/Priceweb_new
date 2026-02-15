@@ -8,12 +8,22 @@ import requests
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 
-# Load configuration from .env
-env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-else:
-    print(f"Warning: .env file not found at {env_path}")
+# Load configuration from multiple possible locations
+env_paths = [
+    '/etc/priceweb_new.env',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+]
+
+loaded = False
+for path in env_paths:
+    if os.path.exists(path):
+        load_dotenv(path)
+        print(f"Loaded config from {path}")
+        loaded = True
+        break
+
+if not loaded:
+    print("Warning: No .env file found in standard locations.")
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
