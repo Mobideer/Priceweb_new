@@ -57,9 +57,11 @@ def diagnose():
         print("\n--- 📱 TELEGRAM HEARTBEAT ---")
         token = os.environ.get("TG_BOT_TOKEN", "").strip()
         chat_id = os.environ.get("TG_CHAT_ID", "").strip()
+        silent = os.environ.get("TG_SILENT", "0")
         
         now = time.strftime('%H:%M:%S')
         print(f"Current server time: {now}")
+        print(f"TG_SILENT: {silent} ({'SILENT MODE IS ON - No notifications will be sent!' if silent == '1' else 'Off'})")
         
         msg = f"🔔 <b>HEARTBEAT [{now}]</b>\nIf you see this, notifications are WORKING on the server."
         print(f"Sending heartbeat to ChatID {chat_id}...")
