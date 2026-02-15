@@ -28,7 +28,7 @@ db.ensure_schema()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
 
-APP_VERSION = "1.3.0"  # Stable release: UI polishes, color coding, and cleanup
+APP_VERSION = "1.4.0"  # Official Stable Release: Stability, Performance & Disk Management
 
 # --- Authentication ---
 login_manager = LoginManager()
