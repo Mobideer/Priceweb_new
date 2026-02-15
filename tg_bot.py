@@ -16,7 +16,7 @@ load_dotenv()
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
-RELOAD_TOKEN = os.environ.get("RELOAD_TOKEN", "").strip()
+# RELOAD_TOKEN is read inside trigger_worker to avoid stale global values
 API_PORT = config.get_api_port()
 PRICE_LOG_PATH = os.environ.get("PRICE_LOG_PATH", "data/cron_log.log")
 PRICE_DB_PATH = os.environ.get("PRICE_DB_PATH", "data/priceweb.db")
@@ -60,6 +60,7 @@ def make_keyboard() -> Dict[str, Any]:
             [{"text": "🚀 Запустить обновление", "callback_data": "run_worker"}],
             [{"text": "📄 Последние логи", "callback_data": "show_log"}],
             [{"text": "📊 Статус БД", "callback_data": "show_status"}],
+            [{"text": "🔍 Диагностика", "callback_data": "show_debug"}],
         ]
     }
 
@@ -101,14 +102,18 @@ def get_logs_text(lines: int = 50) -> str:
 def trigger_worker() -> str:
     # We trigger via the local API to ensure it runs in the same environment/context
     try:
+        # Re-load config to ensure we have the latest token
+        config.load_config()
+        token = os.environ.get("RELOAD_TOKEN", "").strip()
+        
         # Use 127.0.0.1 to avoid IPv6 issues with 'localhost' in some environments
         url = f"http://127.0.0.1:{API_PORT}/api/reload"
         params = {}
-        if RELOAD_TOKEN:
-            params['token'] = RELOAD_TOKEN
+        if token:
+            params['token'] = token
             
         # Increased timeout for potentially slow server response
-        log_len = len(RELOAD_TOKEN) if RELOAD_TOKEN else 0
+        log_len = len(token) if token else 0
         print(f"[BOT] Triggering worker. API_PORT: {API_PORT}, Token Length: {log_len}")
         
         resp = requests.get(url, params=params, timeout=60)
@@ -121,11 +126,22 @@ def trigger_worker() -> str:
         if data.get('ok'):
             return "✅ <b>Воркер запущен!</b>\nРезультат придет в чат после завершения."
         else:
-            return f"❌ <b>Ошибка запуска:</b> {data.get('error')} (API Port: {API_PORT})"
+            return f"❌ <b>Ошибка запуска:</b> {data.get('error')}\n(API Port: {API_PORT}, Sent Token Len: {len(params.get('token',''))})"
     except requests.exceptions.Timeout:
         return f"❌ <b>Таймаут:</b> Сервер не ответил вовремя (30с)."
     except Exception as e:
         return f"❌ <b>Не удалось связаться с API:</b> {e}\n(Убедитесь, что сервер запущен на порту {API_PORT})"
+
+def get_debug_text() -> str:
+    config.load_config()
+    token = os.environ.get("RELOAD_TOKEN", "")
+    return (
+        "🔍 <b>Бот Диагностика:</b>\n"
+        f"• API Port: <code>{API_PORT}</code>\n"
+        f"• RELOAD_TOKEN: <code>{'SET (len=' + str(len(token)) + ')' if token else 'MISSING'}</code>\n"
+        f"• Working Dir: <code>{os.getcwd()}</code>\n"
+        f"• Script: <code>{os.path.abspath(__file__)}</code>"
+    )
 
 def handle_callback(cb: Dict[str, Any]) -> None:
     chat_id = str(cb.get("message", {}).get("chat", {}).get("id", ""))
@@ -140,6 +156,8 @@ def handle_callback(cb: Dict[str, Any]) -> None:
         tg_send(chat_id, get_logs_text(), reply_markup=make_keyboard())
     elif data == "show_status":
         tg_send(chat_id, get_db_status_text(), reply_markup=make_keyboard())
+    elif data == "show_debug":
+        tg_send(chat_id, get_debug_text(), reply_markup=make_keyboard())
 
 def main():
     print("🤖 Бот запущен...")
@@ -168,7 +186,9 @@ def main():
                     msg = upd["message"]
                     if msg.get("text") in ["/start", "/menu"]:
                         status_msg = "Меню управления:"
-                        if not RELOAD_TOKEN:
+                        # Check token dynamically
+                        token = os.environ.get("RELOAD_TOKEN", "")
+                        if not token:
                             status_msg = "⚠️ <b>Внимание:</b> RELOAD_TOKEN не установлен. Бот не сможет запускать обновление.\n\n" + status_msg
                         tg_send(TG_CHAT_ID, status_msg, reply_markup=make_keyboard())
                         
