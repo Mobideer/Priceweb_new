@@ -292,7 +292,10 @@
         fetch(`/ui/history?sku=${encodeURIComponent(sku)}&days=${days}`)
             .then(r => r.text())
             .then(html => {
-                container.innerHTML = html;
+                const range = document.createRange();
+                const fragment = range.createContextualFragment(html);
+                container.innerHTML = '';
+                container.appendChild(fragment);
             })
             .catch(err => {
                 container.innerHTML = '<div style="color: #f44336; padding: 10px;">Ошибка загрузки: ' + err + '</div>';

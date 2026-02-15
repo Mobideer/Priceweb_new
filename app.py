@@ -230,12 +230,21 @@ def ui_history():
         # Aggregation logic similar to priceweb: min price per day
         rows = conn.execute("""
             SELECT 
-                date(ts, 'unixepoch', 'localtime') as day_date,
-                MIN(our_price) as our_price,
-                MIN(min_sup_price) as min_sup_price
-            FROM item_snapshots
-            WHERE sku = ? AND ts >= ?
-            GROUP BY day_date
+                day_date,
+                our_price,
+                min_sup_price,
+                min_sup_supplier
+            FROM (
+                SELECT 
+                    date(ts, 'unixepoch', 'localtime') as day_date,
+                    our_price,
+                    min_sup_price,
+                    min_sup_supplier,
+                    ROW_NUMBER() OVER(PARTITION BY date(ts, 'unixepoch', 'localtime') ORDER BY min_sup_price ASC, ts DESC) as rn
+                FROM item_snapshots
+                WHERE sku = ? AND ts >= ?
+            )
+            WHERE rn = 1
             ORDER BY day_date ASC
         """, (sku, cutoff)).fetchall()
         

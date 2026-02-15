@@ -19,9 +19,9 @@
     <thead>
         <tr>
             <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Date</th>
-            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Our Price</th>
-            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Min Supplier
-                Price</th>
+            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Наша цена</th>
+            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Мин. цена</th>
+            <th style="text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color);">Поставщик</th>
         </tr>
     </thead>
     <tbody>
@@ -30,6 +30,8 @@
             <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.day_date }}</td>
             <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.our_price }}</td>
             <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.min_sup_price }}</td>
+            <td style="padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 0.9em; opacity: 0.8;">{{
+                item.min_sup_supplier or '-' }}</td>
         </tr>
         {% endfor %}
     </tbody>
