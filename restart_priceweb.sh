@@ -3,6 +3,9 @@
 
 echo "🔄 Restarting PriceWeb services..."
 
+echo "🔄 Reloading systemd daemon..."
+sudo systemctl daemon-reload
+
 # Web App
 echo "  - Restarting Web App (port 5002)..."
 sudo systemctl restart priceweb-web.service
@@ -11,8 +14,12 @@ sudo systemctl restart priceweb-web.service
 echo "  - Restarting Telegram Bot..."
 sudo systemctl restart priceweb-bot.service
 
-# Worker (usually simple type, but good to restart)
-echo "  - Restarting Worker..."
+# Worker
+echo "  - Restarting Worker Service..."
 sudo systemctl restart priceweb-worker.service
 
-echo "✅ All services restarted. You can check status with: systemctl status priceweb-*"
+echo "--------------------------------------------------"
+echo "✅ All services restarted."
+echo "💡 To see if everything is OK, run:"
+echo "   systemctl status priceweb-web priceweb-bot priceweb-worker"
+echo "--------------------------------------------------"

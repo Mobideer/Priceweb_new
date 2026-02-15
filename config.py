@@ -11,8 +11,8 @@ def load_config():
     loaded = False
     for path in env_paths:
         if os.path.exists(path):
-            # override=False by default means it won't overwrite existing env vars
-            load_dotenv(path)
+            # override=True ensures .env file values take precedence
+            load_dotenv(path, override=True)
             loaded = True
     return loaded
 

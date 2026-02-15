@@ -475,13 +475,13 @@ def api_reload():
     token = request.args.get('token', '')
     expected_token = os.environ.get("RELOAD_TOKEN", "")
     
-    print(f"[API] Reload requested. Token present: {bool(token)}, Matches: {token == expected_token}")
+    print(f"[API] Reload requested. Received token: {'set' if token else 'missing'} (len={len(token)}), Expected len: {len(expected_token)}")
     
     # Allow if token matches OR user is logged in
     if not (expected_token and token == expected_token) and not current_user.is_authenticated:
         if not expected_token:
             return jsonify({"ok": False, "error": "RELOAD_TOKEN not set in /etc/priceweb_new.env"}), 403
-        return jsonify({"ok": False, "error": f"Unauthorized (expected length {len(expected_token)})"}), 403
+        return jsonify({"ok": False, "error": f"Unauthorized (received len {len(token)}, expected len {len(expected_token)})"}), 403
     
     def run_worker():
         log_path = config.get_log_path()
