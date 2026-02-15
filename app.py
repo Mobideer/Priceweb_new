@@ -3,6 +3,8 @@ import json
 import time
 import sqlite3
 import threading
+from dotenv import load_dotenv
+load_dotenv()
 import subprocess
 import sys
 from datetime import datetime
@@ -379,24 +381,20 @@ def report_markup():
 @app.route('/api/reload')
 @login_required
 def api_reload():
-    import sys
+    def run_worker():
+        try:
+            # Import within thread to avoid global state issues if any
+            import sys
+            import subprocess
+            subprocess.run([sys.executable, "worker.py"], check=True)
+        except Exception as e:
+            print(f"Background worker failed: {e}")
+
     try:
-        # Increased timeout for large datasets (74k+ items)
-        # and added capture_output to see the actual error
-        result = subprocess.run(
-            [sys.executable, "worker.py"], 
-            check=True, 
-            timeout=600,
-            capture_output=True,
-            text=True
-        )
-        return jsonify({"ok": True})
-    except subprocess.CalledProcessError as e:
-        # Return the actual error from worker.py stderr
-        error_msg = e.stderr or str(e)
-        return jsonify({"ok": False, "error": f"Worker failed: {error_msg}"})
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "error": "Worker timed out (max 10 mins)"})
+        thread = threading.Thread(target=run_worker)
+        thread.daemon = True
+        thread.start()
+        return jsonify({"ok": True, "message": "Воркер запущен в фоновом режиме. Следите за логами."})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 

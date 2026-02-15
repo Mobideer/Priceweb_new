@@ -4,3 +4,4 @@ ijson
 gunicorn
 flask-login
 pytz
+python-dotenv
