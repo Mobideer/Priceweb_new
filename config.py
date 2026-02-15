@@ -11,10 +11,9 @@ def load_config():
     loaded = False
     for path in env_paths:
         if os.path.exists(path):
+            # override=False by default means it won't overwrite existing env vars
             load_dotenv(path)
-            # We don't print here to avoid cluttering logs of every module
             loaded = True
-            break
     return loaded
 
 # Load immediately on import
