@@ -6,6 +6,7 @@ import json
 import html
 import requests
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 from dotenv import load_dotenv
 
 import config
@@ -59,12 +60,21 @@ def make_keyboard() -> Dict[str, Any]:
         ]
     }
 
+def format_ts(ts: int) -> str:
+    if not ts: return "Никогда"
+    try:
+        import pytz
+        tz = pytz.timezone("Europe/Moscow")
+        return datetime.fromtimestamp(ts, tz).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+
 def get_db_status_text() -> str:
     st = db.get_db_status()
     if not st.get('ok'):
         return f"❌ Ошибка БД: {st.get('error')}"
     
-    last_run = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.get('worker_last_run_ts', 0))) if st.get('worker_last_run_ts') else "Никогда"
+    last_run = format_ts(st.get('worker_last_run_ts', 0))
     
     return (
         "📊 <b>Статус базы данных:</b>\n"
