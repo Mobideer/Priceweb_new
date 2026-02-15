@@ -104,7 +104,7 @@ def _search_items(q: str, limit: int = 20):
         if not q:
             # Show newest items by default
             rows = conn.execute("SELECT * FROM items_latest ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-            return {"items": [dict(r) for r in rows]}
+            return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
             
         # Simple search matching logic
         # Priority 1: Exact SKU
