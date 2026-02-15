@@ -1,11 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="tag_grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#58a6ff;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#238636;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3fb950;stop-opacity:1" />
     </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+      <feOffset dx="1" dy="1" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
   </defs>
-  <!-- Stylized Price Tag -->
-  <path d="M20,40 L50,10 L85,45 L55,75 L20,40 Z" fill="url(#grad1)" />
-  <circle cx="50" cy="35" r="5" fill="white" />
+  <!-- Modern Stylized Tag from Version 1 -->
+  <path d="M25,45 L55,15 C57,13 60,13 62,15 L85,38 C87,40 87,43 85,45 L55,75 L25,45 Z" fill="url(#tag_grad)" filter="url(#shadow)" />
+  <circle cx="58" cy="32" r="4" fill="white" />
 </svg>
