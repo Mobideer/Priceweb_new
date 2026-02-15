@@ -4,7 +4,7 @@ import time
 import json
 from typing import Dict, Any, List, Optional, Tuple
 
-DB_PATH = os.environ.get("PRICE_DB_PATH", "priceweb.db")
+DB_PATH = os.environ.get("PRICE_DB_PATH", "data/priceweb.db")
 
 def get_connection(timeout: int = 30) -> sqlite3.Connection:
     # Ensure directory exists if path is deeper than root

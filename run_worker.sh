@@ -8,7 +8,7 @@ PROJECT_DIR="/opt/priceweb_new"
 export TG_BOT_TOKEN="ВАШ_ТОКЕН_БОТА"
 export TG_CHAT_ID="ВАШ_CHAT_ID"
 export TZ="Europe/Moscow"
-export PRICE_DB_PATH="${PROJECT_DIR}/priceweb.db"
+export PRICE_DB_PATH="${PROJECT_DIR}/data/priceweb.db"
 
 # --- Execution ---
 echo "Starting worker at $(date)"

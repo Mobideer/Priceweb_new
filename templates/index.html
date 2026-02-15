@@ -69,7 +69,8 @@
                 <td>
                     <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">{{
                         item.name }}</div>
-                    <div style="font-size: 0.85em; opacity: 0.7;">SKU: {{ item.sku }} | Created: {{ item.created_at|format_ts }} | Updated: {{
+                    <div style="font-size: 0.85em; opacity: 0.7;">SKU: {{ item.sku }} | Created: {{
+                        item.created_at|format_ts }} | Updated: {{
                         item.updated_at|format_ts }}</div>
                 </td>
                 <td style="text-align: right; vertical-align: middle;">
@@ -159,6 +160,13 @@
     const searchInput = document.getElementById('searchInput');
     const resultsBody = document.getElementById('resultsBody');
 
+    function formatTs(ts) {
+        if (!ts) return '-';
+        const d = new Date(ts * 1000);
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
         const q = searchInput.value.trim();
@@ -218,7 +226,7 @@
                 <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;" onclick="toggleDetails('${item.sku}')">
                     <td>
                         <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">${item.name}</div>
-                        <div style="font-size: 0.85em; opacity: 0.7;">SKU: ${item.sku}</div>
+                        <div style="font-size: 0.85em; opacity: 0.7;">SKU: ${item.sku} | Created: ${formatTs(item.created_at)} | Updated: ${formatTs(item.updated_at)}</div>
                     </td>
                     <td style="text-align: right; vertical-align: middle;">
                         <div style="font-size: 1.2em; font-weight: bold;">${item.our_price}</div>
