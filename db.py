@@ -85,20 +85,19 @@ def ensure_schema() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_sku_ts ON item_snapshots(sku, ts);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_ts ON item_snapshots(ts);")
 
-        # FTS5 Search Index (Reset to ensure clean state)
-        conn.execute("DROP TRIGGER IF EXISTS items_latest_ai;")
-        conn.execute("DROP TRIGGER IF EXISTS items_latest_ad;")
-        conn.execute("DROP TRIGGER IF EXISTS items_latest_au;")
-        conn.execute("DROP TABLE IF EXISTS items_search;")
-        
+        # FTS5 Search Index
         conn.execute("""
-            CREATE VIRTUAL TABLE items_search USING fts5(
+            CREATE VIRTUAL TABLE IF NOT EXISTS items_search USING fts5(
                 sku UNINDEXED,
                 name
             );
         """)
 
-        # Triggers to keep FTS index in sync
+        # Triggers to keep FTS index in sync (dropped and recreated to ensure latest logic)
+        conn.execute("DROP TRIGGER IF EXISTS items_latest_ai;")
+        conn.execute("DROP TRIGGER IF EXISTS items_latest_ad;")
+        conn.execute("DROP TRIGGER IF EXISTS items_latest_au;")
+
         conn.execute("""
             CREATE TRIGGER items_latest_ai AFTER INSERT ON items_latest BEGIN
                 INSERT INTO items_search(sku, name) VALUES (new.sku, COALESCE(new.name, ''));
