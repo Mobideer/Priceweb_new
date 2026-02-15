@@ -7,7 +7,7 @@ User=root
 Group=root
 WorkingDirectory=/opt/priceweb_new
 Environment="PATH=/opt/priceweb_new/venv/bin"
-Environment="PRICE_DB_PATH=/opt/priceweb_new/data/priceweb.sqlite"
+Environment="PRICE_DB_PATH=/opt/priceweb_new/data/priceweb.db"
 Environment="PRICE_LOG_PATH=/opt/priceweb_new/cron_log.log"
 Environment="TZ=Europe/Moscow"
 ExecStart=/opt/priceweb_new/venv/bin/gunicorn \
