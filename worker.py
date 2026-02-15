@@ -291,7 +291,19 @@ def run():
             
             if not changed and last_processed_etag == new_etag and last_processed_mtime == new_mtime:
                 log_with_timestamp("File is identical and was already processed successfully. Skipping loop.")
-                notify.notify_success({"total": 0, "status": "skipped (no changes)"})
+                
+                # Still prepare stats for notification
+                final_stats = {"total": 0, "status": "skipped (no changes)", "duration": time.time() - t0}
+                try:
+                    db_st = db.get_db_status()
+                    final_stats["items_db"] = db_st.get("items_db", 0)
+                    db_path = db_st.get("db_path", "priceweb.db")
+                    if os.path.exists(db_path):
+                        final_stats["db_size_mb"] = os.path.getsize(db_path) / (1024 * 1024)
+                except:
+                    pass
+                
+                notify.notify_success(final_stats)
                 return
 
             log_with_timestamp("Loading existing data for comparison...")

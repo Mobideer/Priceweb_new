@@ -491,8 +491,16 @@ def api_reload():
             _log_api("Starting background worker subprocess...")
             import sys
             import subprocess
-            # Inheritance of env is default
-            res = subprocess.run([sys.executable, "worker.py"], capture_output=True, text=True)
+            
+            # Explicitly pass environment and set CWD
+            cwd = os.path.dirname(os.path.abspath(__file__))
+            res = subprocess.run(
+                [sys.executable, "worker.py"], 
+                capture_output=True, 
+                text=True, 
+                env=os.environ.copy(),
+                cwd=cwd
+            )
             if res.returncode == 0:
                 _log_api("Background worker finished successfully.")
             else:

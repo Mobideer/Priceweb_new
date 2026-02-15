@@ -98,7 +98,7 @@ def trigger_worker() -> str:
         log_len = len(RELOAD_TOKEN) if RELOAD_TOKEN else 0
         print(f"[BOT] Triggering worker. API_PORT: {API_PORT}, Token Length: {log_len}")
         
-        resp = requests.get(url, params=params, timeout=30)
+        resp = requests.get(url, params=params, timeout=60)
         
         try:
             data = resp.json()
