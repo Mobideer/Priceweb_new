@@ -77,13 +77,41 @@ def ensure_schema() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_sku_ts ON item_snapshots(sku, ts);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_ts ON item_snapshots(ts);")
 
-        # meta: Key-value storage for service info
+        # FTS5 Search Index
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS meta (
-                k TEXT PRIMARY KEY,
-                v TEXT
-            )
+            CREATE VIRTUAL TABLE IF NOT EXISTS items_search USING fts5(
+                sku,
+                name,
+                content='items_latest',
+                content_rowid='rowid'
+            );
         """)
+
+        # Triggers to keep FTS index in sync
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS items_latest_ai AFTER INSERT ON items_latest BEGIN
+                INSERT INTO items_search(rowid, sku, name) VALUES (new.rowid, new.sku, new.name);
+            END;
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS items_latest_ad AFTER DELETE ON items_latest BEGIN
+                INSERT INTO items_search(items_search, rowid, sku, name) VALUES('delete', old.rowid, old.sku, old.name);
+            END;
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS items_latest_au AFTER UPDATE ON items_latest BEGIN
+                INSERT INTO items_search(items_search, rowid, sku, name) VALUES('delete', old.rowid, old.sku, old.name);
+                INSERT INTO items_search(rowid, sku, name) VALUES (new.rowid, new.sku, new.name);
+            END;
+        """)
+
+        # Initial population of search index if empty
+        r_fts = conn.execute("SELECT count(*) FROM items_search").fetchone()
+        if r_fts and r_fts[0] == 0:
+            r_main = conn.execute("SELECT count(*) FROM items_latest").fetchone()
+            if r_main and r_main[0] > 0:
+                conn.execute("INSERT INTO items_search(rowid, sku, name) SELECT rowid, sku, name FROM items_latest")
+
         conn.commit()
     finally:
         conn.close()

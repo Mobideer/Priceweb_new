@@ -109,24 +109,34 @@ def _search_items(q: str, limit: int = 20):
         # Simple search matching logic
         # Priority 1: Exact SKU
         rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ? ORDER BY created_at DESC, sku ASC", (q,)).fetchall()
+        
         if not rows:
-             # Priority 2: SKU starts with
+            # Priority 2: SKU starts with
             rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? ORDER BY created_at DESC, sku ASC LIMIT ?", (q + '%', limit)).fetchall()
         
         if len(rows) < limit:
-            # Priority 3: Name contains
+            # Priority 3: Multi-word FTS Search (if query has multiple words or no SKU match)
+            # This handles both "word1 word2" and single words not matching SKU exactly
             rem = limit - len(rows)
-            # Exclude already found
             found_skus = {r['sku'] for r in rows}
-            placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
             
-            # Use a simple LIKE
-            cursor = conn.execute(
-                f"SELECT * FROM items_latest WHERE lower(name) LIKE ? AND sku NOT IN ({placeholders}) ORDER BY created_at DESC, sku ASC LIMIT ?",
-                (f'%{q}%', *found_skus, rem)
-            )
-            rows.extend(cursor.fetchall())
-            
+            tokens = [t for t in q.split() if t]
+            if tokens:
+                # Construct FTS query: "word1* AND word2*"
+                fts_query = " AND ".join([f"{t}*" for t in tokens])
+                
+                placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
+                sql = f"""
+                    SELECT i.* FROM items_latest i
+                    JOIN items_search s ON i.rowid = s.rowid
+                    WHERE s.items_search MATCH ?
+                      AND i.sku NOT IN ({placeholders})
+                    ORDER BY i.created_at DESC, i.sku ASC
+                    LIMIT ?
+                """
+                cursor = conn.execute(sql, (fts_query, *found_skus, rem))
+                rows.extend(cursor.fetchall())
+        
         return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
     finally:
         conn.close()
