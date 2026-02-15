@@ -261,7 +261,8 @@ def ui_history():
 @login_required
 def report_spread():
     threshold = request.args.get('threshold', 20.0, type=float)
-    limit = request.args.get('limit', 200, type=int)
+    per_page = request.args.get('limit', 100, type=int)
+    page = request.args.get('page', 1, type=int)
     max_price = request.args.get('max_price', 2000000.0, type=float)
     in_stock_only = request.args.get('in_stock_only', 1, type=int)
     exclude_list = request.args.getlist('exclude')
@@ -336,18 +337,26 @@ def report_spread():
             })
             
         results.sort(key=lambda x: x['spread_pct'], reverse=True)
-        results = results[:limit]
+        
+        total_count = len(results)
+        total_pages = (total_count + per_page - 1) // per_page if per_page > 0 else 1
+        page = max(1, min(page, total_pages))
+        
+        start = (page - 1) * per_page
+        items_slice = results[start:start + per_page]
         
         return render_template('report_spread.html', 
-                               items=results, 
+                               items=items_slice, 
                                threshold=threshold, 
-                               limit=limit,
+                               limit=per_page,
+                               page=page,
+                               total_pages=total_pages,
+                               total_count=total_count,
                                max_price=max_price,
                                in_stock_only=in_stock_only,
                                suppliers_all=sorted(list(suppliers_all)),
                                exclude_set=exclude_set,
-                               exclude_list=exclude_list,
-                               total=len(rows))
+                               exclude_list=exclude_list)
     finally:
         conn.close()
 
@@ -355,7 +364,8 @@ def report_spread():
 @login_required
 def report_markup():
     markup_pct = request.args.get('markup_pct', 10.0, type=float)
-    limit = request.args.get('limit', 200, type=int)
+    per_page = request.args.get('limit', 100, type=int)
+    page = request.args.get('page', 1, type=int)
     max_price = request.args.get('max_price', 2000000.0, type=float)
     in_stock_only = request.args.get('in_stock_only', 1, type=int)
     qty_equal = request.args.get('qty_equal', 0, type=int)
@@ -429,24 +439,32 @@ def report_markup():
                     'suppliers_json': r['suppliers_json']
                 })
             
-            # Augment with stats
-            for item in results:
-                _augment_item_with_stats(item)
-        
         results.sort(key=lambda x: x['delta_abs'], reverse=True)
-        results = results[:limit]
+        
+        total_count = len(results)
+        total_pages = (total_count + per_page - 1) // per_page if per_page > 0 else 1
+        page = max(1, min(page, total_pages))
+        
+        start = (page - 1) * per_page
+        items_slice = results[start:start+per_page]
+        
+        # Augment ONLY the visible slice with stats
+        for item in items_slice:
+            _augment_item_with_stats(item)
         
         return render_template('report_markup.html',
-                               items=results,
+                               items=items_slice,
                                markup_pct=markup_pct,
-                               limit=limit,
+                               limit=per_page,
+                               page=page,
+                               total_pages=total_pages,
+                               total_count=total_count,
                                max_price=max_price,
                                in_stock_only=in_stock_only,
                                qty_equal=qty_equal,
                                suppliers_all=sorted(list(suppliers_all)),
                                exclude_set=exclude_set,
-                               exclude_list=exclude_list,
-                               total=len(rows))
+                               exclude_list=exclude_list)
     finally:
         conn.close()
 
