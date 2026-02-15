@@ -86,20 +86,28 @@ def ensure_schema() -> None:
         """)
 
         # Triggers to keep FTS index in sync
+        # We use simpler logic for updating FTS to avoid "rowid mismatch" issues
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS items_latest_ai AFTER INSERT ON items_latest BEGIN
-                INSERT INTO items_search(rowid, sku, name) VALUES (new.rowid, new.sku, new.name);
+                INSERT INTO items_search(sku, name) VALUES (new.sku, new.name);
             END;
         """)
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS items_latest_ad AFTER DELETE ON items_latest BEGIN
-                DELETE FROM items_search WHERE rowid = old.rowid;
+                DELETE FROM items_search WHERE sku = old.sku;
             END;
         """)
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS items_latest_au AFTER UPDATE ON items_latest BEGIN
-                UPDATE items_search SET sku = new.sku, name = new.name WHERE rowid = old.rowid;
+                UPDATE items_search SET name = new.name WHERE sku = old.sku;
             END;
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS meta (
+                k TEXT PRIMARY KEY,
+                v TEXT
+            );
         """)
 
         # Initial population of search index if empty
@@ -107,7 +115,7 @@ def ensure_schema() -> None:
         if r_fts and r_fts[0] == 0:
             r_main = conn.execute("SELECT count(*) FROM items_latest").fetchone()
             if r_main and r_main[0] > 0:
-                conn.execute("INSERT INTO items_search(rowid, sku, name) SELECT rowid, sku, name FROM items_latest")
+                conn.execute("INSERT INTO items_search(sku, name) SELECT sku, name FROM items_latest")
 
         conn.commit()
     finally:

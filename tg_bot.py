@@ -95,17 +95,20 @@ def trigger_worker() -> str:
             params['token'] = RELOAD_TOKEN
             
         # Increased timeout for potentially slow server response
+        log_len = len(RELOAD_TOKEN) if RELOAD_TOKEN else 0
+        print(f"[BOT] Triggering worker. API_PORT: {API_PORT}, Token Length: {log_len}")
+        
         resp = requests.get(url, params=params, timeout=30)
         
         try:
             data = resp.json()
         except Exception:
-            return f"❌ <b>Ошибка:</b> Сервер вернул некорректный ответ (Код: {resp.status_code})."
+            return f"❌ <b>Ошибка:</b> Сервер вернул некорректный ответ (Код: {resp.status_code}, Длина: {len(resp.text)})."
 
         if data.get('ok'):
             return "✅ <b>Воркер запущен!</b>\nРезультат придет в чат после завершения."
         else:
-            return f"❌ <b>Ошибка запуска:</b> {data.get('error')}"
+            return f"❌ <b>Ошибка запуска:</b> {data.get('error')} (API Port: {API_PORT})"
     except requests.exceptions.Timeout:
         return f"❌ <b>Таймаут:</b> Сервер не ответил вовремя (30с)."
     except Exception as e:

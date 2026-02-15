@@ -144,14 +144,17 @@ def rotate_snapshots(conn, now_ts):
     cutoff = now_ts - SNAPSHOT_RETENTION_DAYS * 86400
     conn.execute("DELETE FROM item_snapshots WHERE ts < ?", (cutoff,))
 
-def vacuum_db(conn):
+def vacuum_db():
+    # VACUUM must run on a clean connection without any open transactions.
+    conn = db.get_connection()
+    conn.isolation_level = None  # Autocommit mode
     try:
         log_with_timestamp("Reclaiming storage space (VACUUM)...")
-        # VACUUM cannot run within a transaction, 
-        # but the connection itself can still be open if it's in autocommit mode or committed.
         conn.execute("VACUUM")
     except Exception as e:
         log_with_timestamp(f"Warning: VACUUM failed: {e}")
+    finally:
+        conn.close()
 
 class StatsHelper:
     def __init__(self):
@@ -240,13 +243,17 @@ def run():
     try:
         db.ensure_schema()
         conn = db.get_connection()
+        conn.isolation_level = None # Autocommit mode for explicit transactions
         try:
+            log_with_timestamp("Loading existing data...")
             existing = db.load_existing_latest(conn)
-            new_item_names = []
-            conn.execute("BEGIN")
+            
+            log_with_timestamp("Starting transaction...")
+            conn.execute("BEGIN TRANSACTION")
             cur_upsert = conn.cursor()
             cur_snap = conn.cursor()
 
+            log_with_timestamp("Processing items...")
             if os.path.exists(LOCAL_DATA_FILE):
                 log_with_timestamp(f"Reading from local file: {LOCAL_DATA_FILE}")
                 with open(LOCAL_DATA_FILE, 'r', encoding='utf-8') as f:
@@ -261,12 +268,22 @@ def run():
                     for p in objects:
                         process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats_helper)
 
+            log_with_timestamp("Rotating snapshots...")
             rotate_snapshots(conn, ts)
-            conn.execute("INSERT INTO meta(k,v) VALUES('last_reload_ts', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(ts),))
-            conn.commit()
             
-            # VACUUM must be called OUTSIDE the transaction above.
-            vacuum_db(conn)
+            log_with_timestamp("Updating meta...")
+            conn.execute("INSERT INTO meta(k,v) VALUES('last_reload_ts', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(ts),))
+            
+            log_with_timestamp("Committing transaction...")
+            conn.execute("COMMIT")
+            
+            # Explicitly close cursors
+            cur_upsert.close()
+            cur_snap.close()
+            conn.close()
+            
+            log_with_timestamp("Maintenance stage...")
+            vacuum_db()
             
             if 'f' in locals():
                 f.close()
@@ -298,8 +315,10 @@ def run():
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        notify.notify_fail(str(e))
+        err_msg = traceback.format_exc()
+        log_with_timestamp(f"Worker crashed:\n{err_msg}")
+        last_part = err_msg[-200:] if len(err_msg) > 200 else err_msg
+        notify.notify_fail(f"SQL Logic Error or similar:\n{str(e)}\n\nTraceback summary:\n{last_part}")
         raise
 
 if __name__ == "__main__":
