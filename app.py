@@ -102,16 +102,16 @@ def _search_items(q: str, limit: int = 20):
     conn = db.get_connection()
     try:
         if not q:
-            # Show recently updated items by default
-            rows = conn.execute("SELECT * FROM items_latest ORDER BY updated_at DESC, created_at DESC, sku ASC LIMIT ?", (limit,)).fetchall()
+            # Show newest items by default
+            rows = conn.execute("SELECT * FROM items_latest ORDER BY created_at DESC, sku ASC LIMIT ?", (limit,)).fetchall()
             return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
             
         # Simple search matching logic
         # Priority 1: Exact SKU
-        rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ? ORDER BY updated_at DESC, created_at DESC", (q,)).fetchall()
+        rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ? ORDER BY created_at DESC, sku ASC", (q,)).fetchall()
         if not rows:
              # Priority 2: SKU starts with
-            rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? ORDER BY updated_at DESC, created_at DESC, sku ASC LIMIT ?", (q + '%', limit)).fetchall()
+            rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? ORDER BY created_at DESC, sku ASC LIMIT ?", (q + '%', limit)).fetchall()
         
         if len(rows) < limit:
             # Priority 3: Name contains
@@ -122,7 +122,7 @@ def _search_items(q: str, limit: int = 20):
             
             # Use a simple LIKE
             cursor = conn.execute(
-                f"SELECT * FROM items_latest WHERE lower(name) LIKE ? AND sku NOT IN ({placeholders}) ORDER BY updated_at DESC, created_at DESC, sku ASC LIMIT ?",
+                f"SELECT * FROM items_latest WHERE lower(name) LIKE ? AND sku NOT IN ({placeholders}) ORDER BY created_at DESC, sku ASC LIMIT ?",
                 (f'%{q}%', *found_skus, rem)
             )
             rows.extend(cursor.fetchall())
