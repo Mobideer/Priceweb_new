@@ -122,12 +122,12 @@ def _search_items(q: str, limit: int = 20):
             
             tokens = [t for t in q.split() if t]
             if tokens:
-                # Construct FTS query: "word1" AND "word2"
-                # Wrapping in quotes handles hyphens and other special characters
-                fts_query = " AND ".join([f'"{t}"' for t in tokens])
+                # 1. Try FTS5 Search first (High performance)
+                # Use prefix matching on every token and explicit AND
+                fts_query = " AND ".join([f"{t}*" for t in tokens])
                 
                 placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
-                sql = f"""
+                sql_fts = f"""
                     SELECT i.* FROM items_latest i
                     JOIN items_search s ON i.rowid = s.rowid
                     WHERE s.items_search MATCH ?
@@ -135,8 +135,36 @@ def _search_items(q: str, limit: int = 20):
                     ORDER BY i.created_at DESC, i.sku ASC
                     LIMIT ?
                 """
-                cursor = conn.execute(sql, (fts_query, *found_skus, rem))
-                rows.extend(cursor.fetchall())
+                try:
+                    cursor = conn.execute(sql_fts, (fts_query, *found_skus, rem))
+                    fts_results = cursor.fetchall()
+                    rows.extend(fts_results)
+                    found_skus.update({r['sku'] for r in fts_results})
+                    rem = limit - len(rows)
+                except Exception as e:
+                    print(f"FTS5 Search Error: {e}")
+
+                # 2. Fallback to LIKE if we still need more results
+                # This ensures we find items even if FTS5 has issues with certain characters
+                if rem > 0:
+                    like_clauses = []
+                    params = list(found_skus)
+                    for t in tokens:
+                        like_clauses.append("(lower(i.sku) LIKE ? OR lower(i.name) LIKE ?)")
+                        params.append(f"%{t}%")
+                        params.append(f"%{t}%")
+                    
+                    placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
+                    sql_like = f"""
+                        SELECT * FROM items_latest i
+                        WHERE i.sku NOT IN ({placeholders})
+                        AND {" AND ".join(like_clauses)}
+                        ORDER BY i.created_at DESC, i.sku ASC
+                        LIMIT ?
+                    """
+                    params.append(rem)
+                    cursor = conn.execute(sql_like, params)
+                    rows.extend(cursor.fetchall())
         
         return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
     finally:
