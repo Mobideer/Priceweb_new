@@ -32,11 +32,21 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
     chat_id = os.environ.get("TG_CHAT_ID", "").strip()
     silent = os.environ.get("TG_SILENT", "0") == "1"
 
+    # Write to log file if possible
+    log_path = config.get_log_path()
+
+    def _log_tg(msg):
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [TG] {msg}\n")
+
     if silent:
+        _log_tg("Silent mode is ON, skipping.")
         return
 
     if not token or not chat_id:
-        print(f"[TG_NOTIFY] Token or Chat ID missing. Token: {'set' if token else 'NOT SET'}, ChatID: {'set' if chat_id else 'NOT SET'}")
+        error_msg = f"Token or Chat ID missing. Token: {'set' if token else 'NOT SET'}, ChatID: {'set' if chat_id else 'NOT SET'}"
+        print(f"[TG_NOTIFY] {error_msg}")
+        _log_tg(error_msg)
         return
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -50,12 +60,15 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
     try:
         resp = requests.post(url, data=payload, timeout=10)
         if not resp.ok:
-            print(f"[TG_NOTIFY] Telegram API Error: {resp.status_code} - {resp.text}")
+            err = f"Telegram API Error: {resp.status_code} - {resp.text}"
+            print(f"[TG_NOTIFY] {err}")
+            _log_tg(err)
         else:
-            # Successfully sent
-            pass
+            _log_tg("Successfully sent message to Telegram.")
     except Exception as e:
-        print(f"[TG_NOTIFY] Failed to send message: {e}")
+        err = f"Failed to send message: {e}"
+        print(f"[TG_NOTIFY] {err}")
+        _log_tg(err)
 
 def notify_start(host: str) -> None:
     send(f"🚀 <b>PriceWeb New Worker</b>\nHost: <code>{host}</code>\nStarted: <code>{get_now_str()}</code>")

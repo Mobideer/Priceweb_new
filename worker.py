@@ -11,7 +11,7 @@ JSON_URL = os.environ.get("PRICE_JSON_URL", "https://app.price-matrix.ru/WebApi/
 SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
 LOCAL_DATA_FILE = "data.json"
 
-LOG_PATH = os.environ.get("PRICE_LOG_PATH", "cron_log.log")
+LOG_PATH = config.get_log_path()
 
 def log_with_timestamp(message):
     """Print message with timestamp in Moscow timezone and write to log file."""

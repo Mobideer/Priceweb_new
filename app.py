@@ -453,15 +453,25 @@ def api_reload():
         return jsonify({"ok": False, "error": f"Unauthorized (expected length {len(expected_token)})"}), 403
     
     def run_worker():
+        log_path = config.get_log_path()
+        def _log_api(msg):
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [API_REL] {msg}\n")
+
         try:
-            print("[API] Starting background worker...")
-            # Import within thread to avoid global state issues if any
+            _log_api("Starting background worker subprocess...")
             import sys
             import subprocess
-            subprocess.run([sys.executable, "worker.py"], check=True)
-            print("[API] Background worker finished successfully.")
+            # Inheritance of env is default
+            res = subprocess.run([sys.executable, "worker.py"], capture_output=True, text=True)
+            if res.returncode == 0:
+                _log_api("Background worker finished successfully.")
+            else:
+                _log_api(f"Background worker FAILED with code {res.returncode}.")
+                if res.stderr:
+                    _log_api(f"Worker Stderr: {res.stderr}")
         except Exception as e:
-            print(f"[API] Background worker failed: {e}")
+            _log_api(f"Unexpected error in background worker thread: {e}")
 
     try:
         thread = threading.Thread(target=run_worker)
@@ -490,12 +500,7 @@ def api_debug_env():
 @app.route('/api/logs')
 @login_required
 def api_logs():
-    # Try environment variable first, then fallback to absolute path based on DB location
-    log_path = os.environ.get("PRICE_LOG_PATH")
-    if not log_path:
-        # Derive log path from database path
-        db_dir = os.path.dirname(db.DB_PATH) or '.'
-        log_path = os.path.join(db_dir, "cron_log.log")
+    log_path = config.get_log_path()
     
     try:
         if not os.path.exists(log_path):
