@@ -147,7 +147,14 @@ td {
     border-bottom: 1px solid var(--border-color);
 }
 
+/* Generic zebra striping for simple tables */
 tbody tr:nth-child(even) {
+    background-color: var(--table-stripe);
+}
+
+/* Specialized zebra striping for product list with hidden detail rows */
+tbody tr.product-row:nth-child(4n-1),
+tbody tr.details-row:nth-child(4n) {
     background-color: var(--table-stripe) !important;
 }
 
