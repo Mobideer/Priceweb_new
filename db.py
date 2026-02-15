@@ -77,29 +77,34 @@ def ensure_schema() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_sku_ts ON item_snapshots(sku, ts);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_ts ON item_snapshots(ts);")
 
-        # FTS5 Search Index (Standard table for reliability)
+        # FTS5 Search Index (Reset to ensure clean state)
+        conn.execute("DROP TRIGGER IF EXISTS items_latest_ai;")
+        conn.execute("DROP TRIGGER IF EXISTS items_latest_ad;")
+        conn.execute("DROP TRIGGER IF EXISTS items_latest_au;")
+        conn.execute("DROP TABLE IF EXISTS items_search;")
+        
         conn.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS items_search USING fts5(
-                sku,
+            CREATE VIRTUAL TABLE items_search USING fts5(
+                sku UNINDEXED,
                 name
             );
         """)
 
         # Triggers to keep FTS index in sync
-        # We use simpler logic for updating FTS to avoid "rowid mismatch" issues
         conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS items_latest_ai AFTER INSERT ON items_latest BEGIN
+            CREATE TRIGGER items_latest_ai AFTER INSERT ON items_latest BEGIN
                 INSERT INTO items_search(sku, name) VALUES (new.sku, new.name);
             END;
         """)
         conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS items_latest_ad AFTER DELETE ON items_latest BEGIN
+            CREATE TRIGGER items_latest_ad AFTER DELETE ON items_latest BEGIN
                 DELETE FROM items_search WHERE sku = old.sku;
             END;
         """)
         conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS items_latest_au AFTER UPDATE ON items_latest BEGIN
-                UPDATE items_search SET name = new.name WHERE sku = old.sku;
+            CREATE TRIGGER items_latest_au AFTER UPDATE ON items_latest BEGIN
+                DELETE FROM items_search WHERE sku = old.sku;
+                INSERT INTO items_search(sku, name) VALUES (new.sku, new.name);
             END;
         """)
 
@@ -110,13 +115,9 @@ def ensure_schema() -> None:
             );
         """)
 
-        # Initial population of search index if empty
-        r_fts = conn.execute("SELECT count(*) FROM items_search").fetchone()
-        if r_fts and r_fts[0] == 0:
-            r_main = conn.execute("SELECT count(*) FROM items_latest").fetchone()
-            if r_main and r_main[0] > 0:
-                conn.execute("INSERT INTO items_search(sku, name) SELECT sku, name FROM items_latest")
-
+        # Population
+        conn.execute("INSERT INTO items_search(sku, name) SELECT sku, name FROM items_latest;")
+        
         conn.commit()
     finally:
         conn.close()
