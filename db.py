@@ -15,6 +15,14 @@ def get_connection(timeout: int = 30) -> sqlite3.Connection:
         
     conn = sqlite3.connect(DB_PATH, timeout=timeout)
     conn.row_factory = sqlite3.Row
+    
+    # Apply performance pragmas to every connection
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+    except:
+        pass
+        
     return conn
 
 def ensure_schema() -> None:
