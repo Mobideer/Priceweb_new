@@ -10,18 +10,27 @@ JSON_URL = os.environ.get("PRICE_JSON_URL", "https://app.price-matrix.ru/WebApi/
 SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
 LOCAL_DATA_FILE = "data.json"
 
+LOG_PATH = os.environ.get("PRICE_LOG_PATH", "cron_log.log")
+
 def log_with_timestamp(message):
-    """Print message with timestamp in Moscow timezone."""
+    """Print message with timestamp in Moscow timezone and write to log file."""
     try:
         import pytz
         from datetime import datetime
         tz = pytz.timezone('Europe/Moscow')
         timestamp = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[{timestamp}] {message}")
     except:
         # Fallback if pytz is not available
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[{timestamp}] {message}")
+    
+    log_msg = f"[{timestamp}] {message}"
+    print(log_msg)
+    
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(log_msg + "\n")
+    except Exception as e:
+        print(f"Failed to write to log file: {e}")
 
 def get_exchange_rates():
     """Fetches current exchange rates (USD, EUR -> RUB) with fallbacks."""

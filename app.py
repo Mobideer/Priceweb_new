@@ -412,7 +412,7 @@ def api_logs():
     
     try:
         if not os.path.exists(log_path):
-            return jsonify({"ok": False, "error": f"Log file not found at {log_path}"})
+            return jsonify({"ok": True, "logs": "Лог-файл пока не создан. Нажмите 'Reload Data', чтобы запустить воркер и создать логи."})
 
         
         with open(log_path, 'r') as f:
