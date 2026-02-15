@@ -143,8 +143,88 @@ def process_single_product(p, rates):
 def rotate_snapshots(conn, now_ts):
     cutoff = now_ts - SNAPSHOT_RETENTION_DAYS * 86400
     conn.execute("DELETE FROM item_snapshots WHERE ts < ?", (cutoff,))
-    log_with_timestamp("Reclaiming storage space (VACUUM)...")
-    conn.execute("VACUUM")
+
+def vacuum_db(conn):
+    try:
+        log_with_timestamp("Reclaiming storage space (VACUUM)...")
+        # VACUUM cannot run within a transaction, 
+        # but the connection itself can still be open if it's in autocommit mode or committed.
+        conn.execute("VACUUM")
+    except Exception as e:
+        log_with_timestamp(f"Warning: VACUUM failed: {e}")
+
+class StatsHelper:
+    def __init__(self):
+        self.total_count = 0
+        self.inserted = 0
+        self.changed = 0
+        self.snap_added = 0
+        self.new_item_names = []
+
+def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
+    stats.total_count += 1
+    if stats.total_count % 1000 == 0:
+        log_with_timestamp(f"Processed {stats.total_count} items...")
+
+    it = process_single_product(p, rates)
+    if not it:
+        return
+
+    sku = it['sku']
+    supp_json = json.dumps(it['suppliers'], ensure_ascii=False)
+    
+    curr_vals = (
+        it['name'], supp_json, 
+        it['our_price'], it['our_qty'],
+        it['my_sklad_price'], it['my_sklad_qty'],
+        it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier']
+    )
+    
+    prev = existing.get(sku)
+    is_new = prev is None
+    # Let's compare only the first 9 elements (sku data)
+    is_changed = (prev[:9] != curr_vals) if not is_new else True
+    
+    if is_new or is_changed:
+        cur_snap.execute("""
+            INSERT INTO item_snapshots 
+            (sku, ts, our_price, our_qty, my_sklad_price, my_sklad_qty, 
+             min_sup_price, min_sup_qty, min_sup_supplier)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            sku, ts, 
+            it['our_price'], it['our_qty'],
+            it['my_sklad_price'], it['my_sklad_qty'],
+            it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier']
+        ))
+        stats.snap_added += 1
+    
+    if is_new:
+        cur_upsert.execute("""
+            INSERT INTO items_latest 
+            (sku, name, our_price, our_qty, my_sklad_price, my_sklad_qty,
+             min_sup_price, min_sup_qty, min_sup_supplier, suppliers_json, updated_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (sku, it['name'], it['our_price'], it['our_qty'],
+              it['my_sklad_price'], it['my_sklad_qty'],
+              it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier'],
+              supp_json, ts, ts))
+        stats.inserted += 1
+        if len(stats.new_item_names) < 10:
+            stats.new_item_names.append(it['name'])
+    elif is_changed:
+        cur_upsert.execute("""
+            UPDATE items_latest SET
+            name=?, our_price=?, our_qty=?, 
+            my_sklad_price=?, my_sklad_qty=?,
+            min_sup_price=?, min_sup_qty=?, min_sup_supplier=?,
+            suppliers_json=?, updated_at=?
+            WHERE sku=?
+        """, (it['name'], it['our_price'], it['our_qty'],
+              it['my_sklad_price'], it['my_sklad_qty'],
+              it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier'],
+              supp_json, ts, sku))
+        stats.changed += 1
 
 def run():
     host = os.uname().nodename
@@ -154,10 +234,7 @@ def run():
     rates = get_exchange_rates()
     log_with_timestamp(f"Current Rates: {rates}")
     
-    total_count = 0
-    inserted = 0
-    changed = 0
-    snap_added = 0
+    stats_helper = StatsHelper()
     ts = int(time.time())
 
     try:
@@ -172,95 +249,35 @@ def run():
 
             if os.path.exists(LOCAL_DATA_FILE):
                 log_with_timestamp(f"Reading from local file: {LOCAL_DATA_FILE}")
-                f = open(LOCAL_DATA_FILE, 'r', encoding='utf-8')
-                objects = ijson.items(f, 'catalog.item.products.item')
+                with open(LOCAL_DATA_FILE, 'r', encoding='utf-8') as f:
+                    objects = ijson.items(f, 'catalog.item.products.item')
+                    for p in objects:
+                        process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats_helper)
             else:
                 log_with_timestamp(f"Fetching from URL: {JSON_URL}")
-                resp = requests.get(JSON_URL, stream=True, timeout=300)
-                resp.raise_for_status()
-                objects = ijson.items(resp.raw, 'catalog.item.products.item')
-
-            for p in objects:
-                total_count += 1
-                if total_count % 1000 == 0:
-                    log_with_timestamp(f"Processed {total_count} items...")
-
-                it = process_single_product(p, rates)
-                if not it:
-                    continue
-
-                sku = it['sku']
-                supp_json = json.dumps(it['suppliers'], ensure_ascii=False)
-                
-                curr_vals = (
-                    it['name'], supp_json, 
-                    it['our_price'], it['our_qty'],
-                    it['my_sklad_price'], it['my_sklad_qty'],
-                    it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier']
-                )
-                
-                prev = existing.get(sku)
-                is_new = prev is None
-                # curr_vals has 9 elements, prev in old schema had 9, 
-                # but load_existing_latest now returns 10 (incl created_at)
-                # Let's compare only the first 9 elements (sku data)
-                is_changed = (prev[:9] != curr_vals) if not is_new else True
-                
-                if is_new or is_changed:
-                    cur_snap.execute("""
-                        INSERT INTO item_snapshots 
-                        (sku, ts, our_price, our_qty, my_sklad_price, my_sklad_qty, 
-                         min_sup_price, min_sup_qty, min_sup_supplier)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        sku, ts, 
-                        it['our_price'], it['our_qty'],
-                        it['my_sklad_price'], it['my_sklad_qty'],
-                        it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier']
-                    ))
-                    snap_added += 1
-                
-                if is_new:
-                    cur_upsert.execute("""
-                        INSERT INTO items_latest 
-                        (sku, name, our_price, our_qty, my_sklad_price, my_sklad_qty,
-                         min_sup_price, min_sup_qty, min_sup_supplier, suppliers_json, updated_at, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (sku, it['name'], it['our_price'], it['our_qty'],
-                          it['my_sklad_price'], it['my_sklad_qty'],
-                          it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier'],
-                          supp_json, ts, ts))
-                    inserted += 1
-                    if len(new_item_names) < 10:
-                        new_item_names.append(it['name'])
-                elif is_changed:
-                    cur_upsert.execute("""
-                        UPDATE items_latest SET
-                        name=?, our_price=?, our_qty=?, 
-                        my_sklad_price=?, my_sklad_qty=?,
-                        min_sup_price=?, min_sup_qty=?, min_sup_supplier=?,
-                        suppliers_json=?, updated_at=?
-                        WHERE sku=?
-                    """, (it['name'], it['our_price'], it['our_qty'],
-                          it['my_sklad_price'], it['my_sklad_qty'],
-                          it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier'],
-                          supp_json, ts, sku))
-                    changed += 1
+                with requests.get(JSON_URL, stream=True, timeout=300) as resp:
+                    resp.raise_for_status()
+                    objects = ijson.items(resp.raw, 'catalog.item.products.item')
+                    for p in objects:
+                        process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats_helper)
 
             rotate_snapshots(conn, ts)
             conn.execute("INSERT INTO meta(k,v) VALUES('last_reload_ts', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(ts),))
             conn.commit()
             
+            # VACUUM must be called OUTSIDE the transaction above.
+            vacuum_db(conn)
+            
             if 'f' in locals():
                 f.close()
 
             stats = {
-                "total": total_count,
-                "inserted": inserted,
-                "changed": changed,
-                "snapshots_added": snap_added,
+                "total": stats_helper.total_count,
+                "inserted": stats_helper.inserted,
+                "changed": stats_helper.changed,
+                "snapshots_added": stats_helper.snap_added,
                 "duration": time.time() - t0,
-                "new_items": new_item_names
+                "new_items": stats_helper.new_item_names
             }
             
             # Add DB stats
