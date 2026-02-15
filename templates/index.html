@@ -81,7 +81,8 @@
                 </td>
                 <td data-label="Поставщик" style="text-align: right; vertical-align: middle;">
                     <div style="font-weight: bold;">{{ item.min_sup_price or 'N/A' }}</div>
-                    <div style="font-size: 0.8em; opacity: 0.7;">{{ item.min_sup_supplier or '-' }}</div>
+                    <div style="font-size: 0.8em; opacity: 0.7;">{{ item.min_sup_supplier or '-' }} {{ item.sup_stats }}
+                    </div>
                 </td>
                 <td data-label="" style="text-align: center; vertical-align: middle;">
                     <button class="btn-action"
@@ -236,7 +237,7 @@
                     </td>
                     <td data-label="Поставщик" style="text-align: right; vertical-align: middle;">
                         <div style="font-weight: bold;">${item.min_sup_price || 'N/A'}</div>
-                        <div style="font-size: 0.8em; opacity: 0.7;">${item.min_sup_supplier || '-'}</div>
+                        <div style="font-size: 0.8em; opacity: 0.7;">${item.min_sup_supplier || '-'} ${item.sup_stats || ''}</div>
                     </td>
                     <td data-label="" style="text-align: center; vertical-align: middle;">
                         <button class="btn-action" style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>

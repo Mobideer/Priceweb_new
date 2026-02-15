@@ -127,9 +127,27 @@ def _search_items(q: str, limit: int = 20):
             )
             rows.extend(cursor.fetchall())
             
-        return {"items": [dict(r) for r in rows]}
+        return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
     finally:
         conn.close()
+
+def _augment_item_with_stats(item_dict):
+    """Adds supplier stats (available/total) to the item dictionary."""
+    try:
+        sups = json.loads(item_dict.get('suppliers_json', '[]'))
+        total = 0
+        in_stock = 0
+        for s in sups:
+            name = s.get('supplier', '').strip().lower()
+            if not name or name == 'мой склад':
+                continue
+            total += 1
+            if float(s.get('qty', 0)) > 0:
+                in_stock += 1
+        item_dict['sup_stats'] = f"({in_stock}/{total})" if total > 0 else ""
+    except Exception:
+        item_dict['sup_stats'] = ""
+    return item_dict
 
 # --- Routes ---
 
@@ -359,6 +377,10 @@ def report_markup():
                     'delta_pct': round(delta_pct, 2),
                     'suppliers_json': r['suppliers_json']
                 })
+            
+            # Augment with stats
+            for item in results:
+                _augment_item_with_stats(item)
         
         results.sort(key=lambda x: x['delta_abs'], reverse=True)
         results = results[:limit]
