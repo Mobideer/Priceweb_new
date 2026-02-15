@@ -144,9 +144,10 @@ def _augment_item_with_stats(item_dict):
             total += 1
             if float(s.get('qty', 0)) > 0:
                 in_stock += 1
-        item_dict['sup_stats'] = f"({in_stock}/{total})" if total > 0 else ""
+        # Always return a string to distinguish from missing field
+        item_dict['sup_stats'] = f"({in_stock}/{total})"
     except Exception:
-        item_dict['sup_stats'] = ""
+        item_dict['sup_stats'] = "(err)"
     return item_dict
 
 # --- Routes ---
