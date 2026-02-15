@@ -9,7 +9,7 @@ import config
 
 JSON_URL = os.environ.get("PRICE_JSON_URL", "https://app.price-matrix.ru/WebApi/SummaryExportLatestGet/v2-202010181100-IWYHBWQFVQEMXNPVUNRAULOGYTDTUMMSUEPYBCIWMPYUMVYQLP")
 SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
-LOCAL_DATA_FILE = "data.json"
+LOCAL_DATA_FILE = "data/last_catalog_download.json"
 
 LOG_PATH = config.get_log_path()
 
@@ -51,6 +51,42 @@ def get_exchange_rates():
     except Exception as e:
         log_with_timestamp(f"Warning: Could not fetch real-time exchange rates: {e}. Using default values.")
     return rates
+
+def download_if_needed(conn):
+    """Downloads the JSON file only if it has changed, using ETag/Last-Modified."""
+    etag = db.get_meta_value(conn, 'last_etag')
+    mtime = db.get_meta_value(conn, 'last_modified')
+    
+    headers = {}
+    if etag: headers['If-None-Match'] = etag
+    if mtime: headers['If-Modified-Since'] = mtime
+    
+    # Ensure dir exists
+    os.makedirs(os.path.dirname(LOCAL_DATA_FILE), exist_ok=True)
+    
+    log_with_timestamp(f"Checking for updates from URL: {JSON_URL}")
+    with requests.get(JSON_URL, headers=headers, stream=True, timeout=300) as resp:
+        if resp.status_code == 304:
+            log_with_timestamp("Server returned 304 Not Modified. Using cached file.")
+            return False, etag, mtime
+        
+        resp.raise_for_status()
+        
+        # Download to temp file first
+        tmp_file = LOCAL_DATA_FILE + ".tmp"
+        log_with_timestamp(f"Downloading new data to {tmp_file}...")
+        
+        with open(tmp_file, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=65536):
+                f.write(chunk)
+                
+        os.replace(tmp_file, LOCAL_DATA_FILE)
+        
+        new_etag = resp.headers.get('ETag')
+        new_mtime = resp.headers.get('Last-Modified')
+        
+        log_with_timestamp(f"Download complete. Size: {os.path.getsize(LOCAL_DATA_FILE) / 1024 / 1024:.1f} MB")
+        return True, new_etag, new_mtime
 
 def process_single_product(p, rates):
     """Parses a single product dictionary and returns the item record with prices in RUB."""
@@ -246,7 +282,19 @@ def run():
         conn = db.get_connection()
         conn.isolation_level = None # Autocommit mode for explicit transactions
         try:
-            log_with_timestamp("Loading existing data...")
+            # Step 1: Download
+            changed, new_etag, new_mtime = download_if_needed(conn)
+            
+            # Check if we even need to process
+            last_processed_etag = db.get_meta_value(conn, 'proc_etag')
+            last_processed_mtime = db.get_meta_value(conn, 'proc_mtime')
+            
+            if not changed and last_processed_etag == new_etag and last_processed_mtime == new_mtime:
+                log_with_timestamp("File is identical and was already processed successfully. Skipping loop.")
+                notify.notify_success({"total": 0, "status": "skipped (no changes)"})
+                return
+
+            log_with_timestamp("Loading existing data for comparison...")
             existing = db.load_existing_latest(conn)
             
             log_with_timestamp("Starting transaction...")
@@ -254,26 +302,25 @@ def run():
             cur_upsert = conn.cursor()
             cur_snap = conn.cursor()
 
-            log_with_timestamp("Processing items...")
-            if os.path.exists(LOCAL_DATA_FILE):
-                log_with_timestamp(f"Reading from local file: {LOCAL_DATA_FILE}")
-                with open(LOCAL_DATA_FILE, 'r', encoding='utf-8') as f:
-                    objects = ijson.items(f, 'catalog.item.products.item')
-                    for p in objects:
-                        process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats_helper)
-            else:
-                log_with_timestamp(f"Fetching from URL: {JSON_URL}")
-                with requests.get(JSON_URL, stream=True, timeout=300) as resp:
-                    resp.raise_for_status()
-                    objects = ijson.items(resp.raw, 'catalog.item.products.item')
-                    for p in objects:
-                        process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats_helper)
+            log_with_timestamp(f"Processing items from {LOCAL_DATA_FILE}...")
+            if not os.path.exists(LOCAL_DATA_FILE):
+                raise FileNotFoundError(f"Local data file {LOCAL_DATA_FILE} missing after download attempt.")
+                
+            with open(LOCAL_DATA_FILE, 'r', encoding='utf-8') as f:
+                objects = ijson.items(f, 'catalog.item.products.item')
+                for p in objects:
+                    process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats_helper)
 
             log_with_timestamp("Rotating snapshots...")
             rotate_snapshots(conn, ts)
             
             log_with_timestamp("Updating meta...")
-            conn.execute("INSERT INTO meta(k,v) VALUES('last_reload_ts', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(ts),))
+            db.set_meta_value(conn, 'last_reload_ts', str(ts))
+            if new_etag: db.set_meta_value(conn, 'last_etag', new_etag)
+            if new_mtime: db.set_meta_value(conn, 'last_modified', new_mtime)
+            # Store that we processed this specific version successfully
+            if new_etag: db.set_meta_value(conn, 'proc_etag', new_etag)
+            if new_mtime: db.set_meta_value(conn, 'proc_mtime', new_mtime)
             
             log_with_timestamp("Committing transaction...")
             conn.execute("COMMIT")

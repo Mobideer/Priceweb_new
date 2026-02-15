@@ -98,7 +98,7 @@ def ensure_schema() -> None:
             );
         """)
 
-        # Triggers to keep FTS index in sync (using 'delete' marker for robustness)
+        # Triggers to keep FTS index in sync
         conn.execute("""
             CREATE TRIGGER items_latest_ai AFTER INSERT ON items_latest BEGIN
                 INSERT INTO items_search(sku, name) VALUES (new.sku, COALESCE(new.name, ''));
@@ -106,14 +106,12 @@ def ensure_schema() -> None:
         """)
         conn.execute("""
             CREATE TRIGGER items_latest_ad AFTER DELETE ON items_latest BEGIN
-                INSERT INTO items_search(items_search, sku, name)
-                VALUES('delete', old.sku, COALESCE(old.name, ''));
+                DELETE FROM items_search WHERE sku = old.sku;
             END;
         """)
         conn.execute("""
             CREATE TRIGGER items_latest_au AFTER UPDATE ON items_latest BEGIN
-                INSERT INTO items_search(items_search, sku, name)
-                VALUES('delete', old.sku, COALESCE(old.name, ''));
+                DELETE FROM items_search WHERE sku = old.sku;
                 INSERT INTO items_search(sku, name) VALUES (new.sku, COALESCE(new.name, ''));
             END;
         """)
@@ -175,3 +173,10 @@ def get_db_status() -> Dict[str, Any]:
         conn.close()
 
     return {"ok": False, "error": "Unknown error"} # Should not reach here
+
+def get_meta_value(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    r = conn.execute("SELECT v FROM meta WHERE k=?", (key,)).fetchone()
+    return r[0] if r else None
+
+def set_meta_value(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT INTO meta(k,v) VALUES(?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (key, value))
