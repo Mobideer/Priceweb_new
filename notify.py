@@ -10,9 +10,6 @@ except ImportError:
 
 import config
 
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
-TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
-TG_SILENT = os.environ.get("TG_SILENT", "0") == "1"
 TIMEZONE = os.environ.get("TZ", "Europe/Moscow")
 
 def get_now_str() -> str:
@@ -30,19 +27,21 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
     Sends a message to Telegram.
     Respects TG_SILENT environment variable.
     """
-    if TG_SILENT:
+    # Read settings on demand to ensure they are loaded by config.py
+    token = os.environ.get("TG_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TG_CHAT_ID", "").strip()
+    silent = os.environ.get("TG_SILENT", "0") == "1"
+
+    if silent:
         return
 
-    if not TG_BOT_TOKEN or not TG_CHAT_ID:
-        print(f"[TG_NOTIFY] Token or Chat ID missing. Message: {text}")
+    if not token or not chat_id:
+        print(f"[TG_NOTIFY] Token or Chat ID missing. Token: {'set' if token else 'NOT SET'}, ChatID: {'set' if chat_id else 'NOT SET'}")
         return
 
-    # In a full production version, we would verify cooldown logic with DB here
-    # For now, we assume simple direct sending or basic cooldown in worker
-    
-    url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
-        "chat_id": TG_CHAT_ID,
+        "chat_id": chat_id,
         "text": text,
         "parse_mode": "HTML",
         "disable_web_page_preview": True
@@ -52,6 +51,9 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
         resp = requests.post(url, data=payload, timeout=10)
         if not resp.ok:
             print(f"[TG_NOTIFY] Telegram API Error: {resp.status_code} - {resp.text}")
+        else:
+            # Successfully sent
+            pass
     except Exception as e:
         print(f"[TG_NOTIFY] Failed to send message: {e}")
 
