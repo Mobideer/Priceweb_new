@@ -2,24 +2,23 @@
 
 {% block content %}
 <div class="status-bar">
-    <span>DB Path: {{ status.db_path }}</span>
-    <span>Items: {{ status.items_db }}</span>
-    <span>Last Run: {{ status.worker_last_run_ts | format_ts }}</span>
-    {% if status.ok %}
-    <span style="color: var(--success-color)">● System OK</span>
-    {% else %}
-    <span style="color: var(--danger-color)">● {{ status.error }}</span>
-    {% endif %}
-    <div class="stats">
-        DB: <b>{{ status.db_path.split('/')[-1] }}</b> | Status: <b style="color: #4caf50;">OK</b> | Items: <b>{{
-            status.items_db }}</b>
-        <button id="reloadBtn" onclick="triggerReload(event)"
-            style="margin-left: 10px; cursor: pointer; background: var(--bg-card); color: var(--accent-color); border: 1px solid var(--accent-color); border-radius: 4px; padding: 2px 8px; font-size: 11px;">Reload
-            Data</button>
-        <button onclick="showLogs()"
-            style="margin-left: 5px; cursor: pointer; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 8px; font-size: 11px;">View
-            Logs</button>
-        <span id="reloadStatus" style="font-size: 11px; margin-left: 5px;"></span>
+    <div class="stats" style="display: flex; align-items: center; gap: 15px; width: 100%;">
+        <span title="{{ status.db_path }}">DB: <b>{{ status.db_path.split('/')[-1] }}</b></span>
+        <span>Items: <b>{{ status.items_db }}</b></span>
+        <span>Last Run: <b>{{ status.worker_last_run_ts | format_ts }}</b></span>
+        <span
+            style="color: {% if status.ok %}var(--success-color){% else %}var(--danger-color){% endif %}; white-space: nowrap;">
+            ● {% if status.ok %}System OK{% else %}{{ status.error }}{% endif %}
+        </span>
+        <div style="margin-left: auto; display: flex; gap: 5px; align-items: center;">
+            <button id="reloadBtn" onclick="triggerReload(event)"
+                style="cursor: pointer; background: var(--bg-card); color: var(--accent-color); border: 1px solid var(--accent-color); border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold;">Reload
+                Data</button>
+            <button onclick="showLogs()"
+                style="cursor: pointer; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold;">View
+                Logs</button>
+            <span id="reloadStatus" style="font-size: 11px; margin-left: 5px;"></span>
+        </div>
     </div>
 </div>
 
@@ -320,9 +319,9 @@
                 btn.disabled = false;
                 btn.style.opacity = "1";
                 if (d.ok) {
-                    status.innerText = "Done!";
+                    status.innerText = d.message || "Done!";
                     status.style.color = "#4caf50";
-                    setTimeout(() => { status.innerText = ""; }, 3000);
+                    setTimeout(() => { status.innerText = ""; }, 5000);
                 } else {
                     status.innerText = "Error: " + d.error;
                     status.style.color = "#f44336";
