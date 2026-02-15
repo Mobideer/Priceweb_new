@@ -90,21 +90,23 @@ def ensure_schema() -> None:
             );
         """)
 
-        # Triggers to keep FTS index in sync
+        # Triggers to keep FTS index in sync (using 'delete' marker for robustness)
         conn.execute("""
             CREATE TRIGGER items_latest_ai AFTER INSERT ON items_latest BEGIN
-                INSERT INTO items_search(sku, name) VALUES (new.sku, new.name);
+                INSERT INTO items_search(sku, name) VALUES (new.sku, COALESCE(new.name, ''));
             END;
         """)
         conn.execute("""
             CREATE TRIGGER items_latest_ad AFTER DELETE ON items_latest BEGIN
-                DELETE FROM items_search WHERE sku = old.sku;
+                INSERT INTO items_search(items_search, sku, name)
+                VALUES('delete', old.sku, COALESCE(old.name, ''));
             END;
         """)
         conn.execute("""
             CREATE TRIGGER items_latest_au AFTER UPDATE ON items_latest BEGIN
-                DELETE FROM items_search WHERE sku = old.sku;
-                INSERT INTO items_search(sku, name) VALUES (new.sku, new.name);
+                INSERT INTO items_search(items_search, sku, name)
+                VALUES('delete', old.sku, COALESCE(old.name, ''));
+                INSERT INTO items_search(sku, name) VALUES (new.sku, COALESCE(new.name, ''));
             END;
         """)
 
