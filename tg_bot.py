@@ -8,22 +8,12 @@ import requests
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 
-# Load configuration from multiple possible locations
-env_paths = [
-    '/etc/priceweb_new.env',
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-]
+import config
 
-loaded = False
-for path in env_paths:
-    if os.path.exists(path):
-        load_dotenv(path)
-        print(f"Loaded config from {path}")
-        loaded = True
-        break
-
-if not loaded:
-    print("Warning: No .env file found in standard locations.")
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
+TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
+RELOAD_TOKEN = os.environ.get("RELOAD_TOKEN", "").strip()
+API_PORT = config.get_api_port()
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
@@ -101,14 +91,23 @@ def get_logs_text(lines: int = 50) -> str:
 def trigger_worker() -> str:
     # We trigger via the local API to ensure it runs in the same environment/context
     try:
-        resp = requests.get("http://127.0.0.1:5002/api/reload", timeout=10)
+        url = f"http://localhost:{API_PORT}/api/reload"
+        params = {}
+        if RELOAD_TOKEN:
+            params['token'] = RELOAD_TOKEN
+            
+        resp = requests.get(url, params=params, timeout=10)
+        
+        if resp.status_code == 403:
+            return "❌ <b>Ошибка:</b> Доступ запрещен (проверьте RELOAD_TOKEN)."
+            
         data = resp.json()
         if data.get('ok'):
             return "✅ <b>Воркер запущен!</b>\nРезультат придет в чат после завершения."
         else:
             return f"❌ <b>Ошибка запуска:</b> {data.get('error')}"
     except Exception as e:
-        return f"❌ <b>Не удалось связаться с API:</b> {e}\n(Убедитесь, что сервер запущен)"
+        return f"❌ <b>Не удалось связаться с API:</b> {e}\n(Убедитесь, что сервер запущен на порту {API_PORT})"
 
 def handle_callback(cb: Dict[str, Any]) -> None:
     chat_id = str(cb.get("message", {}).get("chat", {}).get("id", ""))

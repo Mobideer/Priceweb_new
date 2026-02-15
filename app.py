@@ -3,8 +3,7 @@ import json
 import time
 import sqlite3
 import threading
-from dotenv import load_dotenv
-load_dotenv()
+import config
 import subprocess
 import sys
 from datetime import datetime
@@ -379,8 +378,13 @@ def report_markup():
         conn.close()
 
 @app.route('/api/reload')
-@login_required
 def api_reload():
+    token = request.args.get('token', '')
+    expected_token = os.environ.get("RELOAD_TOKEN", "")
+    
+    # Allow if token matches OR user is logged in
+    if not (expected_token and token == expected_token) and not current_user.is_authenticated:
+        abort(403)
     def run_worker():
         try:
             # Import within thread to avoid global state issues if any
