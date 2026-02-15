@@ -10,6 +10,7 @@
             style="color: {% if status.ok %}var(--success-color){% else %}var(--danger-color){% endif %};">
             ● {% if status.ok %}System OK{% else %}{{ status.error }}{% endif %}
         </span>
+        <span style="opacity: 0.5; font-size: 0.85em; margin-left: auto;">v{{ status.version }}</span>
         <div class="actions">
             <button id="reloadBtn" type="button" onclick="triggerReload(event)" class="btn-reload">Reload Data</button>
             <button type="button" onclick="showLogs()" class="btn-logs">View Logs</button>
