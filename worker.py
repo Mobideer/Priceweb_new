@@ -10,7 +10,7 @@ import notify
 import config
 
 JSON_URL = os.environ.get("PRICE_JSON_URL", "https://app.price-matrix.ru/WebApi/SummaryExportLatestGet/v2-202010181100-IWYHBWQFVQEMXNPVUNRAULOGYTDTUMMSUEPYBCIWMPYUMVYQLP")
-SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "30"))
+SNAPSHOT_RETENTION_DAYS = int(os.environ.get("SNAPSHOT_RETENTION_DAYS", "15"))
 LOCAL_DATA_FILE = "data/last_catalog_download.json"
 
 LOG_PATH = config.get_log_path()
@@ -185,6 +185,20 @@ def rotate_snapshots(conn, now_ts):
 def vacuum_db():
     # VACUUM must run on a clean connection without any open transactions.
     try:
+        db_path = os.environ.get("PRICE_DB_PATH", "data/priceweb.db")
+        if os.path.exists(db_path):
+            db_size = os.path.getsize(db_path)
+            
+            # Simple check for disk space if possible
+            try:
+                import shutil
+                total, used, free = shutil.disk_usage(os.path.dirname(os.path.abspath(db_path)) or ".")
+                if free < (db_size * 1.5):
+                    log_with_timestamp(f"Skipping VACUUM: insufficient free space ({free/(1024*1024):.1f}MB free, need ~{db_size*1.5/(1024*1024):.1f}MB)")
+                    return
+            except:
+                pass
+
         # Give a small moment for other connections to truly finalize
         time.sleep(0.5)
         conn = db.get_connection()
@@ -347,6 +361,11 @@ def run():
             if 'f' in locals():
                 f.close()
 
+            # Run vacuum ONLY if something actually changed and we have a clean status
+            # This prevents infinite loops of vacuum failing on a full disk when nothing is even happening
+            if stats_helper.inserted > 0 or stats_helper.changed > 0 or stats_helper.snap_added > 0:
+                vacuum_db()
+
             stats = {
                 "total": stats_helper.total_count,
                 "inserted": stats_helper.inserted,
@@ -380,11 +399,7 @@ def run():
         notify.notify_fail(f"Worker Error:\n{str(e)}\n\nTraceback summary:\n{last_part}")
         raise
     finally:
-        # Run vacuum strictly outside the main connection life-cycle
-        try:
-            vacuum_db()
-        except:
-            pass
+        pass
 
 if __name__ == "__main__":
     run()
