@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 
 import config
 
+# Load environment variables from .env file FIRST
+load_dotenv()
+
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
 RELOAD_TOKEN = os.environ.get("RELOAD_TOKEN", "").strip()
