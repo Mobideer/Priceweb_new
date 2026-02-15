@@ -1,0 +1,18 @@
+[Unit]
+Description=PriceWeb Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/priceweb_new
+Environment="PATH=/opt/priceweb_new/venv/bin"
+EnvironmentFile=-/opt/priceweb_new/.env
+# Environmental variables are loaded via .env in the script
+ExecStart=/opt/priceweb_new/venv/bin/python /opt/priceweb_new/tg_bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
