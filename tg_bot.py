@@ -135,10 +135,14 @@ def trigger_worker() -> str:
 def get_debug_text() -> str:
     config.load_config()
     token = os.environ.get("RELOAD_TOKEN", "")
+    db_path = os.environ.get("PRICE_DB_PATH", "data/priceweb.db")
+    log_path = config.get_log_path()
     return (
         "🔍 <b>Бот Диагностика:</b>\n"
         f"• API Port: <code>{API_PORT}</code>\n"
         f"• RELOAD_TOKEN: <code>{'SET (len=' + str(len(token)) + ')' if token else 'MISSING'}</code>\n"
+        f"• DB Path: <code>{db_path}</code>\n"
+        f"• Log Path: <code>{log_path}</code>\n"
         f"• Working Dir: <code>{os.getcwd()}</code>\n"
         f"• Script: <code>{os.path.abspath(__file__)}</code>"
     )
