@@ -77,13 +77,11 @@ def ensure_schema() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_sku_ts ON item_snapshots(sku, ts);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snap_ts ON item_snapshots(ts);")
 
-        # FTS5 Search Index
+        # FTS5 Search Index (Standard table for reliability)
         conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS items_search USING fts5(
                 sku,
-                name,
-                content='items_latest',
-                content_rowid='rowid'
+                name
             );
         """)
 
@@ -95,13 +93,12 @@ def ensure_schema() -> None:
         """)
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS items_latest_ad AFTER DELETE ON items_latest BEGIN
-                INSERT INTO items_search(items_search, rowid, sku, name) VALUES('delete', old.rowid, old.sku, old.name);
+                DELETE FROM items_search WHERE rowid = old.rowid;
             END;
         """)
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS items_latest_au AFTER UPDATE ON items_latest BEGIN
-                INSERT INTO items_search(items_search, rowid, sku, name) VALUES('delete', old.rowid, old.sku, old.name);
-                INSERT INTO items_search(rowid, sku, name) VALUES (new.rowid, new.sku, new.name);
+                UPDATE items_search SET sku = new.sku, name = new.name WHERE rowid = old.rowid;
             END;
         """)
 

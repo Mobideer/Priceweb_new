@@ -122,8 +122,9 @@ def _search_items(q: str, limit: int = 20):
             
             tokens = [t for t in q.split() if t]
             if tokens:
-                # Construct FTS query: "word1* AND word2*"
-                fts_query = " AND ".join([f"{t}*" for t in tokens])
+                # Construct FTS query: "word1" AND "word2"
+                # Wrapping in quotes handles hyphens and other special characters
+                fts_query = " AND ".join([f'"{t}"' for t in tokens])
                 
                 placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
                 sql = f"""

@@ -5,75 +5,78 @@ import notify
 import config
 import requests
 import json
+import time
 
 def diagnose():
     config.load_config()
-    db.ensure_schema()
+    db.ensure_schema() # This will create triggers if missing
     conn = db.get_connection()
     try:
-        print("--- 📦 DATABASE CONTENT CHECK ---")
-        target_sku = "gg-cf226xl"
-        print(f"Checking for SKU: '{target_sku}'")
+        print("--- 📦 DATABASE REPAIR & SYNC ---")
         
-        row_main = conn.execute("SELECT rowid, sku, name FROM items_latest WHERE lower(sku) = ?", (target_sku.lower(),)).fetchone()
-        if row_main:
-            print(f"✅ Found in items_latest: RowID={row_main[0]}, SKU='{row_main[1]}', Name='{row_main[2][:30]}...'")
-            
-            row_fts = conn.execute("SELECT rowid, sku, name FROM items_search WHERE rowid = ?", (row_main[0],)).fetchone()
-            if row_fts:
-                print(f"✅ Found in items_search by RowID: SKU='{row_fts[1]}', Name='{row_fts[2][:30]}...'")
-            else:
-                print("❌ NOT found in items_search by RowID!")
+        # Force standard FTS5 schema (without 'content' mapping which failed on server)
+        print("Fixing Search Index schema...")
+        conn.execute("DROP TABLE IF EXISTS items_search")
+        conn.execute("CREATE VIRTUAL TABLE items_search USING fts5(sku, name)")
+        
+        main_count = conn.execute("SELECT count(*) FROM items_latest").fetchone()[0]
+        print(f"Main table count: {main_count}")
+        
+        print("Repopulating index (Full rebuild)...")
+        conn.execute("INSERT INTO items_search(rowid, sku, name) SELECT rowid, sku, name FROM items_latest")
+        conn.commit()
+        
+        fts_count = conn.execute("SELECT count(*) FROM items_search").fetchone()[0]
+        print(f"FTS index rebuilt. New count: {fts_count}")
+
+        print("\n--- 🔍 SEARCH FINAL TEST ---")
+        # Standardize query for FTS5 on this environment
+        # We use a simpler query first
+        test_q = "gg cf226"
+        # Wrap tokens in quotes to handle hyphens and special chars
+        fts_query = ' '.join([f'"{t}"' for t in test_q.split()])
+        print(f"Testing FTS query: '{fts_query}'")
+        
+        res = conn.execute("""
+            SELECT i.sku, i.name FROM items_latest i
+            JOIN items_search s ON i.rowid = s.rowid
+            WHERE s.items_search MATCH ?
+            LIMIT 5
+        """, (fts_query,)).fetchall()
+        
+        if res:
+            print(f"✅ SUCCESS! Found {len(res)} results for '{test_q}':")
+            for r in res:
+                print(f"  - {r[0]}: {r[1][:30]}...")
         else:
-            print(f"❌ '{target_sku}' NOT FOUND in items_latest. Checking with LIKE...")
-            like_res = conn.execute("SELECT sku FROM items_latest WHERE sku LIKE '%cf226%' LIMIT 5").fetchall()
-            print(f"Similar SKUs in items_latest: {[r[0] for r in like_res]}")
+            print(f"❌ Still no results for '{fts_query}'. Trying fallback 'LIKE'...")
+            fallback = conn.execute("SELECT sku FROM items_latest WHERE sku LIKE '%cf226%' LIMIT 1").fetchone()
+            if fallback:
+                print(f"  (Note: '{fallback[0]}' exists in main table, but FTS5 didn't find it)")
 
-        print("\n--- 🔍 SEARCH SYNTAX LAB ---")
-        test_queries = [
-            "gg cf226",
-            "gg* AND cf226*",
-            "\"gg\" AND \"cf226\"",
-            "\"gg-cf226xl\"",
-            "cf226"
-        ]
-        
-        for q in test_queries:
-            try:
-                res = conn.execute("SELECT sku FROM items_search WHERE items_search MATCH ? LIMIT 1", (q,)).fetchone()
-                status = "✅ MATCHED" if res else "❌ NO MATCH"
-                print(f"Match '{q}': {status}")
-            except Exception as e:
-                print(f"Match '{q}': ❌ ERROR ({e})")
-
-        print("\n--- 📱 TELEGRAM DEEP CHECK ---")
+        print("\n--- 📱 TELEGRAM HEARTBEAT ---")
         token = os.environ.get("TG_BOT_TOKEN", "").strip()
         chat_id = os.environ.get("TG_CHAT_ID", "").strip()
         
-        if not token or not chat_id:
-            print("❌ TG_BOT_TOKEN or TG_CHAT_ID is missing!")
-        else:
-            print(f"Attempting to send message to ChatID {chat_id}...")
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {
-                "chat_id": chat_id,
-                "text": "🧪 <b>Deep Diagnostic Test</b>\nIf you see this, the bot and chat ID are definitely correct.",
-                "parse_mode": "HTML"
-            }
-            try:
-                resp = requests.post(url, data=payload, timeout=10)
-                print(f"Telegram API Response Status: {resp.status_code}")
-                print(f"Telegram API Response Body: {resp.text}")
-                data = resp.json()
-                if data.get('ok'):
-                    print("✅ Telegram says OK! If you don't see the message, verify you're looking at the right bot/chat.")
-                else:
-                    print(f"❌ Telegram says NOT OK: {data.get('description')}")
-            except Exception as e:
-                print(f"❌ Network error calling Telegram: {e}")
+        now = time.strftime('%H:%M:%S')
+        print(f"Current server time: {now}")
+        
+        msg = f"🔔 <b>HEARTBEAT [{now}]</b>\nIf you see this, notifications are WORKING on the server."
+        print(f"Sending heartbeat to ChatID {chat_id}...")
+        
+        try:
+            resp = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", 
+                                 data={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, 
+                                 timeout=10)
+            if resp.ok:
+                print("✅ Telegram OK. Please check your phone RIGHT NOW.")
+            else:
+                print(f"❌ Telegram Error: {resp.text}")
+        except Exception as e:
+            print(f"❌ Connection Error: {e}")
 
     except Exception as e:
-        print(f"❌ DIAGNOSIS ERROR: {e}")
+        print(f"❌ ERROR: {e}")
         import traceback
         traceback.print_exc()
     finally:
