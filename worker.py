@@ -143,6 +143,8 @@ def process_single_product(p, rates):
 def rotate_snapshots(conn, now_ts):
     cutoff = now_ts - SNAPSHOT_RETENTION_DAYS * 86400
     conn.execute("DELETE FROM item_snapshots WHERE ts < ?", (cutoff,))
+    log_with_timestamp("Reclaiming storage space (VACUUM)...")
+    conn.execute("VACUUM")
 
 def run():
     host = os.uname().nodename
