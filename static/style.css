@@ -147,6 +147,10 @@ td {
     border-bottom: 1px solid var(--border-color);
 }
 
+tbody tr:nth-child(even) {
+    background-color: var(--table-stripe) !important;
+}
+
 th {
     background-color: var(--header-bg);
     font-weight: 600;

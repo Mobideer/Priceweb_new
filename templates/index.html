@@ -60,8 +60,7 @@
         </thead>
         <tbody id="resultsBody">
             {% for item in items %}
-            <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;"
-                onclick="toggleDetails('{{ item.sku }}')">
+            <tr class="product-row" style="cursor: pointer;" onclick="toggleDetails('{{ item.sku }}')">
                 <td data-label="Product">
                     <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">{{
                         item.name }}</div>
@@ -70,18 +69,19 @@
                         item.updated_at|format_ts }}</div>
                 </td>
                 <td data-label="Наша цена" style="text-align: right; vertical-align: middle;">
-                    <div style="font-size: 1.2em; font-weight: bold;">{{ item.our_price }}</div>
+                    <div style="font-size: 1.2em; font-weight: bold;">{{ item.our_price }} ₽</div>
                     <div style="font-size: 0.8em; opacity: 0.6;">кол-во: {{ item.our_qty }}</div>
                 </td>
                 <td data-label="Мой Склад" style="text-align: right; vertical-align: middle;">
                     <div
                         style="font-weight: bold; color: {% if item.my_sklad_qty > 0 %}#4caf50{% else %}#888{% endif %};">
-                        {{ item.my_sklad_price }}
+                        {{ item.my_sklad_price }} ₽
                     </div>
                     <div style="font-size: 0.8em; opacity: 0.6;">кол-во: {{ item.my_sklad_qty }}</div>
                 </td>
                 <td data-label="Поставщик" style="text-align: right; vertical-align: middle;">
-                    <div style="font-weight: bold;">{{ item.min_sup_price or 'N/A' }}</div>
+                    <div style="font-weight: bold;">{{ item.min_sup_price if item.min_sup_price else 'N/A' }}{% if
+                        item.min_sup_price %} ₽{% endif %}</div>
                     <div style="font-size: 0.8em; opacity: 0.7;">{{ item.min_sup_supplier or '-' }} {{ item.sup_stats }}
                     </div>
                 </td>
@@ -135,7 +135,7 @@
                                         s.original_price }} {{ s.currency }}</span>
                                     <span style="margin: 0 4px; opacity: 0.5;">→</span>
                                     {% endif %}
-                                    {{ s.price }} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>
+                                    {{ s.price }} <span style="font-size: 0.8em; opacity: 0.6;">₽</span>
                                 </td>
                                 <td data-label="Qty"
                                     style="padding: 6px 8px; text-align: right; color: {% if s.qty > 0 %}#4caf50{% else %}#f44336{% endif %};">
@@ -206,8 +206,8 @@
             let suppliersHtml = '';
             suppliers.forEach(s => {
                 const priceDisplay = s.currency !== 'RUB'
-                    ? `<span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">${s.original_price} ${s.currency}</span> <span style="margin: 0 4px; opacity: 0.5;">→</span> ${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`
-                    : `${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`;
+                    ? `<span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">${s.original_price} ${s.currency}</span> <span style="margin: 0 4px; opacity: 0.5;">→</span> ${s.price} <span style="font-size: 0.8em; opacity: 0.6;">₽</span>`
+                    : `${s.price} <span style="font-size: 0.8em; opacity: 0.6;">₽</span>`;
 
                 suppliersHtml += `
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -221,23 +221,23 @@
             });
 
             html += `
-                <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;" onclick="toggleDetails('${item.sku}')">
+                <tr class="product-row" style="cursor: pointer;" onclick="toggleDetails('${item.sku}')">
                     <td data-label="Product">
                         <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">${item.name}</div>
                         <div style="font-size: 0.85em; opacity: 0.7;">SKU: ${item.sku} | Created: ${formatTs(item.created_at)} | Updated: ${formatTs(item.updated_at)}</div>
                     </td>
                     <td data-label="Наша цена" style="text-align: right; vertical-align: middle;">
-                        <div style="font-size: 1.2em; font-weight: bold;">${item.our_price}</div>
+                        <div style="font-size: 1.2em; font-weight: bold;">${item.our_price} ₽</div>
                         <div style="font-size: 0.8em; opacity: 0.6;">кол-во: ${item.our_qty}</div>
                     </td>
                     <td data-label="Мой Склад" style="text-align: right; vertical-align: middle;">
                         <div style="font-weight: bold; color: ${item.my_sklad_qty > 0 ? '#4caf50' : '#888'};">
-                            ${item.my_sklad_price}
+                            ${item.my_sklad_price} ₽
                         </div>
                         <div style="font-size: 0.8em; opacity: 0.6;">кол-во: ${item.my_sklad_qty}</div>
                     </td>
                     <td data-label="Поставщик" style="text-align: right; vertical-align: middle;">
-                        <div style="font-weight: bold;">${item.min_sup_price || 'N/A'}</div>
+                        <div style="font-weight: bold;">${item.min_sup_price ? item.min_sup_price + ' ₽' : 'N/A'}</div>
                         <div style="font-size: 0.8em; opacity: 0.7;">${item.min_sup_supplier || '-'} ${item.sup_stats || ''}</div>
                     </td>
                     <td data-label="" style="text-align: center; vertical-align: middle;">
