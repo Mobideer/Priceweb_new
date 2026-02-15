@@ -125,8 +125,12 @@ def ensure_schema() -> None:
             );
         """)
 
-        # Population
-        conn.execute("INSERT INTO items_search(sku, name) SELECT sku, name FROM items_latest;")
+        # Population (only if empty to avoid duplicates on every run)
+        search_count = conn.execute("SELECT COUNT(*) FROM items_search").fetchone()[0]
+        if search_count == 0:
+            log_msg = "Populating items_search from items_latest..."
+            print(log_msg)
+            conn.execute("INSERT INTO items_search(sku, name) SELECT sku, name FROM items_latest;")
         
         conn.commit()
     finally:
