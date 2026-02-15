@@ -26,7 +26,7 @@ db.ensure_schema()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
 
-APP_VERSION = "1.2.0-beta" # Increment this for each major fix to verify deployment
+APP_VERSION = "1.2.2-beta" # Color-coded history table, no charts
 
 # --- Authentication ---
 login_manager = LoginManager()

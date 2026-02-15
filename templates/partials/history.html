@@ -10,10 +10,7 @@
     </select>
 </form>
 
-<div class="chart-container"
-    style="background: var(--header-bg); padding: 15px; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 20px;">
-    <canvas id="historyChart-{{ sku }}"></canvas>
-</div>
+<!-- Графики отключены по запросу, используется цветовая кодировка таблицы -->
 
 <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
     <thead>
@@ -26,65 +23,29 @@
     </thead>
     <tbody>
         {% for item in items %}
+        {% set prev = items[loop.index0 - 1] if loop.index0 > 0 else none %}
         <tr>
-            <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.day_date }}</td>
-            <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.our_price }}</td>
-            <td style="padding: 10px; border-bottom: 1px solid var(--border-color);">{{ item.min_sup_price }}</td>
-            <td style="padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 0.9em; opacity: 0.8;">{{
-                item.min_sup_supplier or '-' }}</td>
+            <td style="padding: 10px; border-bottom: 1px solid var(--border-color); opacity: 0.7;">{{ item.day_date }}
+            </td>
+            <td
+                style="padding: 10px; border-bottom: 1px solid var(--border-color); font-weight: 500;
+                color: {% if prev and prev.our_price and item.our_price < prev.our_price %}var(--success-color){% elif prev and prev.our_price and item.our_price > prev.our_price %}var(--danger-color){% endif %};">
+                {{ item.our_price }}
+                {% if prev and prev.our_price and item.our_price < prev.our_price %} <small>↓</small>{% elif prev and
+                    prev.our_price and item.our_price > prev.our_price %} <small>↑</small>{% endif %}
+            </td>
+            <td
+                style="padding: 10px; border-bottom: 1px solid var(--border-color); font-weight: 500;
+                color: {% if prev and prev.min_sup_price and item.min_sup_price < prev.min_sup_price %}var(--success-color){% elif prev and prev.min_sup_price and item.min_sup_price > prev.min_sup_price %}var(--danger-color){% endif %};">
+                {{ item.min_sup_price }}
+                {% if prev and prev.min_sup_price and item.min_sup_price < prev.min_sup_price %} <small>↓</small>{% elif
+                    prev and prev.min_sup_price and item.min_sup_price > prev.min_sup_price %} <small>↑</small>{% endif
+                    %}
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 0.9em; opacity: 0.8;">
+                {{ item.min_sup_supplier or '-' }}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
-<script>
-    (function () {
-        const ctx = document.getElementById('historyChart-{{ sku }}').getContext('2d');
-        const data = {
-            labels: [{% for i in items %}'{{ i.day_date }}', {% endfor %}],
-    datasets: [
-        {
-            label: 'Наша цена',
-            data: [{% for i in items %}{{ i.our_price or 'null' }}, {% endfor %}],
-        borderColor: '#58a6ff',
-            backgroundColor: 'rgba(88, 166, 255, 0.1)',
-                fill: true,
-                    tension: 0.3
-        },
-    {
-        label: 'Мин. цена поставщика',
-            data: [{% for i in items %} { { i.min_sup_price or 'null' } }, {% endfor %}],
-    borderColor: '#d29922',
-        backgroundColor: 'rgba(210, 153, 34, 0.1)',
-            fill: true,
-                tension: 0.3
-        }
-            ]
-        };
-
-    const config = {
-        type: 'line',
-        data: data,
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    labels: { color: '#c9d1d9' }
-                }
-            },
-            scales: {
-                y: {
-                    ticks: { color: '#8b949e' },
-                    grid: { color: '#30363d' }
-                },
-                x: {
-                    ticks: { color: '#8b949e' },
-                    grid: { color: '#30363d' }
-                }
-            }
-        }
-    };
-
-    new Chart(ctx, config);
-    }) ();
-</script>
