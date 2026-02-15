@@ -151,7 +151,10 @@ def main():
                 elif "message" in upd:
                     msg = upd["message"]
                     if msg.get("text") in ["/start", "/menu"]:
-                        tg_send(TG_CHAT_ID, "Меню управления:", reply_markup=make_keyboard())
+                        status_msg = "Меню управления:"
+                        if not RELOAD_TOKEN:
+                            status_msg = "⚠️ <b>Внимание:</b> RELOAD_TOKEN не установлен. Бот не сможет запускать обновление.\n\n" + status_msg
+                        tg_send(TG_CHAT_ID, status_msg, reply_markup=make_keyboard())
                         
         except KeyboardInterrupt:
             break

@@ -382,25 +382,46 @@ def api_reload():
     token = request.args.get('token', '')
     expected_token = os.environ.get("RELOAD_TOKEN", "")
     
+    print(f"[API] Reload requested. Token present: {bool(token)}, Matches: {token == expected_token}")
+    
     # Allow if token matches OR user is logged in
     if not (expected_token and token == expected_token) and not current_user.is_authenticated:
         if not expected_token:
             return jsonify({"ok": False, "error": "RELOAD_TOKEN not set in /etc/priceweb_new.env"}), 403
-        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+        return jsonify({"ok": False, "error": f"Unauthorized (expected length {len(expected_token)})"}), 403
+    
     def run_worker():
         try:
+            print("[API] Starting background worker...")
             # Import within thread to avoid global state issues if any
             import sys
             import subprocess
             subprocess.run([sys.executable, "worker.py"], check=True)
+            print("[API] Background worker finished successfully.")
         except Exception as e:
-            print(f"Background worker failed: {e}")
+            print(f"[API] Background worker failed: {e}")
 
     try:
         thread = threading.Thread(target=run_worker)
         thread.daemon = True
         thread.start()
         return jsonify({"ok": True, "message": "Воркер запущен в фоновом режиме. Следите за логами."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+@app.route('/api/debug_env')
+@login_required # Security: only for logged in users
+def api_debug_env():
+    try:
+        # Only show names of sensitive vars
+        keys = list(os.environ.keys())
+        important_keys = ["TG_BOT_TOKEN", "TG_CHAT_ID", "RELOAD_TOKEN", "PRICE_DB_PATH", "PORT"]
+        details = {k: ("SET (len=" + str(len(os.environ[k])) + ")" if k in os.environ else "MISSING") for k in important_keys}
+        return jsonify({
+            "all_keys_count": len(keys),
+            "important_vars": details,
+            "config_loaded": config.load_config() # Re-check
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
