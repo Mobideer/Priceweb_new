@@ -2,22 +2,18 @@
 
 {% block content %}
 <div class="status-bar">
-    <div class="stats" style="display: flex; align-items: center; gap: 15px; width: 100%;">
+    <div class="stats">
         <span title="{{ status.db_path }}">DB: <b>{{ status.db_path.split('/')[-1] }}</b></span>
         <span>Items: <b>{{ status.items_db }}</b></span>
         <span>Last Run: <b>{{ status.worker_last_run_ts | format_ts }}</b></span>
-        <span
-            style="color: {% if status.ok %}var(--success-color){% else %}var(--danger-color){% endif %}; white-space: nowrap;">
+        <span class="status-indicator"
+            style="color: {% if status.ok %}var(--success-color){% else %}var(--danger-color){% endif %};">
             ● {% if status.ok %}System OK{% else %}{{ status.error }}{% endif %}
         </span>
-        <div style="margin-left: auto; display: flex; gap: 5px; align-items: center;">
-            <button id="reloadBtn" onclick="triggerReload(event)"
-                style="cursor: pointer; background: var(--bg-card); color: var(--accent-color); border: 1px solid var(--accent-color); border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold;">Reload
-                Data</button>
-            <button onclick="showLogs()"
-                style="cursor: pointer; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: bold;">View
-                Logs</button>
-            <span id="reloadStatus" style="font-size: 11px; margin-left: 5px;"></span>
+        <div class="actions">
+            <button id="reloadBtn" type="button" onclick="triggerReload(event)" class="btn-reload">Reload Data</button>
+            <button type="button" onclick="showLogs()" class="btn-logs">View Logs</button>
+            <span id="reloadStatus" class="status-text"></span>
         </div>
     </div>
 </div>
@@ -303,11 +299,14 @@
     }
 
     function triggerReload(e) {
-        if (e) e.preventDefault();
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         const btn = document.getElementById('reloadBtn');
         const status = document.getElementById('reloadStatus');
 
-        if (!confirm("Start background worker reload?")) return;
+        if (!confirm("Обновить данные из МойСклад и от поставщиков? Это может занять несколько минут.")) return;
 
         btn.disabled = true;
         btn.style.opacity = "0.5";

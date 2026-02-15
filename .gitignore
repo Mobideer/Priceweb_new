@@ -13,3 +13,4 @@ data.json
 /data/
 *.sqlite
 data/priceweb.sqlite
+.env
