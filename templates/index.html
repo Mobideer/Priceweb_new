@@ -65,29 +65,29 @@
             {% for item in items %}
             <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;"
                 onclick="toggleDetails('{{ item.sku }}')">
-                <td>
+                <td data-label="Product">
                     <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">{{
                         item.name }}</div>
                     <div style="font-size: 0.85em; opacity: 0.7;">SKU: {{ item.sku }} | Created: {{
                         item.created_at|format_ts }} | Updated: {{
                         item.updated_at|format_ts }}</div>
                 </td>
-                <td style="text-align: right; vertical-align: middle;">
+                <td data-label="Наша цена" style="text-align: right; vertical-align: middle;">
                     <div style="font-size: 1.2em; font-weight: bold;">{{ item.our_price }}</div>
                     <div style="font-size: 0.8em; opacity: 0.6;">кол-во: {{ item.our_qty }}</div>
                 </td>
-                <td style="text-align: right; vertical-align: middle;">
+                <td data-label="Мой Склад" style="text-align: right; vertical-align: middle;">
                     <div
                         style="font-weight: bold; color: {% if item.my_sklad_qty > 0 %}#4caf50{% else %}#888{% endif %};">
                         {{ item.my_sklad_price }}
                     </div>
                     <div style="font-size: 0.8em; opacity: 0.6;">кол-во: {{ item.my_sklad_qty }}</div>
                 </td>
-                <td style="text-align: right; vertical-align: middle;">
+                <td data-label="Поставщик" style="text-align: right; vertical-align: middle;">
                     <div style="font-weight: bold;">{{ item.min_sup_price or 'N/A' }}</div>
                     <div style="font-size: 0.8em; opacity: 0.7;">{{ item.min_sup_supplier or '-' }}</div>
                 </td>
-                <td style="text-align: center; vertical-align: middle;">
+                <td data-label="" style="text-align: center; vertical-align: middle;">
                     <button class="btn-action"
                         style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
                 </td>
@@ -127,10 +127,11 @@
 
                             {% for s in in_stock + out_of_stock %}
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                <td style="padding: 6px 8px;">{{ s.supplier }}</td>
-                                <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">{{
+                                <td data-label="Supplier" style="padding: 6px 8px;">{{ s.supplier }}</td>
+                                <td data-label="SKU"
+                                    style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">{{
                                     s.supplier_sku }}</td>
-                                <td style="padding: 6px 8px; text-align: right; font-weight: bold;">
+                                <td data-label="Price" style="padding: 6px 8px; text-align: right; font-weight: bold;">
                                     {% if s.currency != 'RUB' %}
                                     <span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">{{
                                         s.original_price }} {{ s.currency }}</span>
@@ -138,7 +139,7 @@
                                     {% endif %}
                                     {{ s.price }} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>
                                 </td>
-                                <td
+                                <td data-label="Qty"
                                     style="padding: 6px 8px; text-align: right; color: {% if s.qty > 0 %}#4caf50{% else %}#f44336{% endif %};">
                                     {{ s.qty }}
                                 </td>
@@ -212,10 +213,10 @@
 
                 suppliersHtml += `
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 6px 8px;">${s.supplier}</td>
-                        <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">${s.supplier_sku || ''}</td>
-                        <td style="padding: 6px 8px; text-align: right; font-weight: bold;">${priceDisplay}</td>
-                        <td style="padding: 6px 8px; text-align: right; color: ${s.qty > 0 ? '#4caf50' : '#f44336'};">
+                        <td data-label="Supplier" style="padding: 6px 8px;">${s.supplier}</td>
+                        <td data-label="SKU" style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">${s.supplier_sku || ''}</td>
+                        <td data-label="Price" style="padding: 6px 8px; text-align: right; font-weight: bold;">${priceDisplay}</td>
+                        <td data-label="Qty" style="padding: 6px 8px; text-align: right; color: ${s.qty > 0 ? '#4caf50' : '#f44336'};">
                             ${s.qty}
                         </td>
                     </tr>`;
@@ -223,25 +224,25 @@
 
             html += `
                 <tr class="product-row" style="background: rgba(255,255,255,0.05); cursor: pointer;" onclick="toggleDetails('${item.sku}')">
-                    <td>
+                    <td data-label="Product">
                         <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">${item.name}</div>
                         <div style="font-size: 0.85em; opacity: 0.7;">SKU: ${item.sku} | Created: ${formatTs(item.created_at)} | Updated: ${formatTs(item.updated_at)}</div>
                     </td>
-                    <td style="text-align: right; vertical-align: middle;">
+                    <td data-label="Наша цена" style="text-align: right; vertical-align: middle;">
                         <div style="font-size: 1.2em; font-weight: bold;">${item.our_price}</div>
                         <div style="font-size: 0.8em; opacity: 0.6;">кол-во: ${item.our_qty}</div>
                     </td>
-                    <td style="text-align: right; vertical-align: middle;">
+                    <td data-label="Мой Склад" style="text-align: right; vertical-align: middle;">
                         <div style="font-weight: bold; color: ${item.my_sklad_qty > 0 ? '#4caf50' : '#888'};">
                             ${item.my_sklad_price}
                         </div>
                         <div style="font-size: 0.8em; opacity: 0.6;">кол-во: ${item.my_sklad_qty}</div>
                     </td>
-                    <td style="text-align: right; vertical-align: middle;">
+                    <td data-label="Поставщик" style="text-align: right; vertical-align: middle;">
                         <div style="font-weight: bold;">${item.min_sup_price || 'N/A'}</div>
                         <div style="font-size: 0.8em; opacity: 0.7;">${item.min_sup_supplier || '-'}</div>
                     </td>
-                    <td style="text-align: center; vertical-align: middle;">
+                    <td data-label="" style="text-align: center; vertical-align: middle;">
                         <button class="btn-action" style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
                     </td>
                 </tr>
