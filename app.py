@@ -480,10 +480,11 @@ def report_changes():
     try:
         cutoff = int(time.time()) - days * 86400
         
-        # Get snapshots for the period, ensuring we have enough data (at least 2 per item)
-        # We need name too, so join with items_latest or just fetch it
+        # Get snapshots for the period
+        # We need name AND suppliers_json from items_latest
         query = """
-            SELECT s.sku, s.ts, s.min_sup_price, s.our_price, i.name
+            SELECT s.sku, s.ts, s.min_sup_price, s.our_price, s.min_sup_supplier, 
+                   i.name, i.suppliers_json
             FROM item_snapshots s
             LEFT JOIN items_latest i ON s.sku = i.sku
             WHERE s.ts >= ?
@@ -502,7 +503,10 @@ def report_changes():
             if len(snaps) < 2:
                 continue
                 
-            name = snaps[0]['name'] or sku
+            # Use name/json from the first snapshot joined (should be consistent as i.name comes from items_latest)
+            first = snaps[0]
+            name = first['name'] or sku
+            suppliers_json = first['suppliers_json'] or "[]"
             
             # Iterate through snapshots to find changes
             for i in range(1, len(snaps)):
@@ -523,10 +527,13 @@ def report_changes():
                             'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
                             'old_price': p_prev,
                             'new_price': p_curr,
+                            'old_supplier': prev['min_sup_supplier'],
+                            'new_supplier': curr['min_sup_supplier'],
                             'diff_pct': round(diff_pct, 1),
-                            'type': 'min_price' # Market Price
+                            'type': 'min_price', # Market Price
+                            'suppliers_json': suppliers_json
                         })
-                        continue # Don't report same item twice for same timestamp if both changed (prioritize market)
+                        continue 
 
                 # Check our_price
                 p_prev_our = prev['our_price'] or 0
@@ -542,8 +549,11 @@ def report_changes():
                             'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
                             'old_price': p_prev_our,
                             'new_price': p_curr_our,
+                            'old_supplier': "Наш магазин",
+                            'new_supplier': "Наш магазин",
                             'diff_pct': round(diff_pct, 1),
-                            'type': 'our_price' # Our Price
+                            'type': 'our_price', # Our Price
+                            'suppliers_json': suppliers_json
                         })
 
         # Sort by latest change first, then largest change
