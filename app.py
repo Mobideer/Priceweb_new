@@ -122,6 +122,22 @@ def _parse_filter_value(val):
     except:
         return '=', val # Fallback to string equality if not a number
 
+@app.route('/api/run-worker-external', methods=['GET', 'POST'])
+def run_worker_external():
+    """Trigger worker via external URL with token."""
+    token = request.args.get('token')
+    secret = os.environ.get("WORKER_TOKEN")
+    
+    if not secret or token != secret:
+        return jsonify({"status": "error", "message": "Invalid or missing token"}), 403
+    
+    try:
+        # Run worker in background
+        subprocess.Popen([sys.executable, "worker.py"])
+        return jsonify({"status": "started"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 def _get_items(q: str = "", limit: int = 20, page: int = 1, sort_by: str = "created_at", sort_asc: bool = False, filters: Dict = None):
     conn = db.get_connection()
     try:
