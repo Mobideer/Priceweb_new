@@ -8,7 +8,26 @@
     Shows items with price changes > {{ threshold }}% over the last {{ days }} days.
 </div>
 
-<form class="toolbar" method="get">
+<form class="toolbar" method="get" id="filterForm">
+    <div style="display: flex; gap: 10px; margin-right: 20px;">
+        <a href="?type=all&days={{ days }}&threshold={{ threshold }}"
+            class="btn-tab {% if type == 'all' %}active{% endif %}"
+            style="{% if type == 'all' %}background: var(--accent-color); color: white; border-color: var(--accent-color);{% endif %}">
+            All
+        </a>
+        <a href="?type=min_price&days={{ days }}&threshold={{ threshold }}"
+            class="btn-tab {% if type == 'min_price' %}active{% endif %}"
+            style="{% if type == 'min_price' %}background: var(--accent-color); color: white; border-color: var(--accent-color);{% endif %}">
+            Market Price
+        </a>
+        <a href="?type=our_price&days={{ days }}&threshold={{ threshold }}"
+            class="btn-tab {% if type == 'our_price' %}active{% endif %}"
+            style="{% if type == 'our_price' %}background: var(--accent-color); color: white; border-color: var(--accent-color);{% endif %}">
+            Our Price
+        </a>
+        <input type="hidden" name="type" value="{{ type }}">
+    </div>
+
     <div>
         <label>Threshold %</label>
         <input name="threshold" value="{{ threshold }}" style="width: 80px;">
@@ -19,6 +38,24 @@
     </div>
     <button type="submit" class="primary">Update</button>
 </form>
+
+<style>
+    .btn-tab {
+        padding: 6px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        text-decoration: none;
+        color: var(--text-main);
+        transition: all 0.2s;
+        display: inline-block;
+        background: var(--bg-card);
+    }
+
+    .btn-tab:hover {
+        background: var(--bg-hover);
+        text-decoration: none;
+    }
+</style>
 
 <div class="total-summary">
     Found: <b>{{ items|length }}</b> events

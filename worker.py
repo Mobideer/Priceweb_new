@@ -455,8 +455,13 @@ def run():
             
             # Notify about sharp price changes
             if stats_helper.sharp_changes:
-                log_with_timestamp(f"Found {len(stats_helper.sharp_changes)} sharp price changes. Sending notification...")
-                notify.notify_price_changes(stats_helper.sharp_changes)
+                # Filter for Telegram: ONLY "our_price" changes
+                tg_changes = [c for c in stats_helper.sharp_changes if c['type'] == 'our_price']
+                if tg_changes:
+                    log_with_timestamp(f"Found {len(tg_changes)} sharp 'Our Price' changes. Sending notification...")
+                    notify.notify_price_changes(tg_changes)
+                else:
+                    log_with_timestamp(f"Found {len(stats_helper.sharp_changes)} total changes, but none were 'Our Price'. Skipping TG notification.")
 
             # Check for missing items (deleted from feed)
             if existing: # Only check if we had existing items

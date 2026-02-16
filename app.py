@@ -475,6 +475,7 @@ def report_markup():
 def report_changes():
     days = request.args.get('days', 7, type=int)
     threshold = request.args.get('threshold', 30.0, type=float)
+    type_filter = request.args.get('type', 'all') # 'all', 'min_price', 'our_price'
     
     conn = db.get_connection()
     try:
@@ -514,47 +515,53 @@ def report_changes():
                 curr = snaps[i]
                 
                 # Check min_sup_price
-                p_prev = prev['min_sup_price'] or 0
-                p_curr = curr['min_sup_price'] or 0
-                
-                if p_prev > 0 and p_curr > 0:
-                    diff_pct = (p_curr - p_prev) / p_prev * 100.0
-                    if abs(diff_pct) >= threshold:
-                        changes.append({
-                            'sku': sku,
-                            'name': name,
-                            'ts': curr['ts'],
-                            'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
-                            'old_price': p_prev,
-                            'new_price': p_curr,
-                            'old_supplier': prev['min_sup_supplier'],
-                            'new_supplier': curr['min_sup_supplier'],
-                            'diff_pct': round(diff_pct, 1),
-                            'type': 'min_price', # Market Price
-                            'suppliers_json': suppliers_json
-                        })
-                        continue 
+                if type_filter in ['all', 'min_price']:
+                    p_prev = prev['min_sup_price'] or 0
+                    p_curr = curr['min_sup_price'] or 0
+                    
+                    if p_prev > 0 and p_curr > 0:
+                        diff_pct = (p_curr - p_prev) / p_prev * 100.0
+                        if abs(diff_pct) >= threshold:
+                            changes.append({
+                                'sku': sku,
+                                'name': name,
+                                'ts': curr['ts'],
+                                'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
+                                'old_price': p_prev,
+                                'new_price': p_curr,
+                                'old_supplier': prev['min_sup_supplier'],
+                                'new_supplier': curr['min_sup_supplier'],
+                                'diff_pct': round(diff_pct, 1),
+                                'type': 'min_price', # Market Price
+                                'suppliers_json': suppliers_json
+                            })
+                            # If found one change type for this timestamp, we might want to continue to check next type
+                            # But if 'min_price' changed, we added it. 
+                            # We don't skip to next iteration because 'our_price' might have changed too at the same step
+                            # (though unlikely in exact same snapshot usually, but possible).
+                            # Let's removing "continue" to allow catching both if they happen simultaneously.
 
                 # Check our_price
-                p_prev_our = prev['our_price'] or 0
-                p_curr_our = curr['our_price'] or 0
-                
-                if p_prev_our > 0 and p_curr_our > 0:
-                    diff_pct = (p_curr_our - p_prev_our) / p_prev_our * 100.0
-                    if abs(diff_pct) >= threshold:
-                        changes.append({
-                            'sku': sku,
-                            'name': name,
-                            'ts': curr['ts'],
-                            'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
-                            'old_price': p_prev_our,
-                            'new_price': p_curr_our,
-                            'old_supplier': "Наш магазин",
-                            'new_supplier': "Наш магазин",
-                            'diff_pct': round(diff_pct, 1),
-                            'type': 'our_price', # Our Price
-                            'suppliers_json': suppliers_json
-                        })
+                if type_filter in ['all', 'our_price']:
+                    p_prev_our = prev['our_price'] or 0
+                    p_curr_our = curr['our_price'] or 0
+                    
+                    if p_prev_our > 0 and p_curr_our > 0:
+                        diff_pct = (p_curr_our - p_prev_our) / p_prev_our * 100.0
+                        if abs(diff_pct) >= threshold:
+                            changes.append({
+                                'sku': sku,
+                                'name': name,
+                                'ts': curr['ts'],
+                                'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
+                                'old_price': p_prev_our,
+                                'new_price': p_curr_our,
+                                'old_supplier': "Наш магазин",
+                                'new_supplier': "Наш магазин",
+                                'diff_pct': round(diff_pct, 1),
+                                'type': 'our_price', # Our Price
+                                'suppliers_json': suppliers_json
+                            })
 
         # Sort by latest change first, then largest change
         changes.sort(key=lambda x: (x['ts'], abs(x['diff_pct'])), reverse=True)
@@ -562,7 +569,8 @@ def report_changes():
         return render_template('report_changes.html',
                                items=changes,
                                days=days,
-                               threshold=threshold)
+                               threshold=threshold,
+                               type=type_filter)
     finally:
         conn.close()
 
