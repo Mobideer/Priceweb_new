@@ -28,7 +28,11 @@ db.ensure_schema()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
 
-APP_VERSION = "1.5.0"  # Dashboard UI Enhancements: Sorting & Filtering
+APP_VERSION = "1.6.0"  # Server-side Pagination & Search
+
+@app.context_processor
+def inject_version():
+    return dict(version=APP_VERSION)
 
 # --- Authentication ---
 login_manager = LoginManager()
