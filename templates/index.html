@@ -36,15 +36,23 @@
     </div>
 </div>
 
-<form id="searchForm" class="toolbar" method="get" action="/">
+<form id="searchForm" class="toolbar" method="get" action="/"
+    style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
     <input type="text" id="searchInput" name="q" placeholder="Live Search SKU or Name..." value="{{ q }}" size="40"
-        autocomplete="off">
-    <select name="limit" onchange="this.form.submit()">
-        <option value="20" {% if limit==20 %}selected{% endif %}>20 results</option>
-        <option value="50" {% if limit==50 %}selected{% endif %}>50 results</option>
-        <option value="100" {% if limit==100 %}selected{% endif %}>100 results</option>
+        autocomplete="off" style="flex: 2; min-width: 200px;">
+
+    <input id="filter-our-price" placeholder="Our Price: >1000 q>0"
+        style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-color);">
+
+    <input id="filter-mysklad" placeholder="MySklad: >1000 q>0"
+        style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-color);">
+
+    <select name="limit" onchange="this.form.submit()" style="flex: 0 0 auto;">
+        <option value="20" {% if limit==20 %}selected{% endif %}>20</option>
+        <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
+        <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
     </select>
-    <button type="submit" class="primary">Search</button>
+    <button type="submit" class="primary" style="flex: 0 0 auto;">Search</button>
 </form>
 
 <div class="table-container">
@@ -65,15 +73,7 @@
                 </th>
                 <th style="width: 5%;"></th>
             </tr>
-            <tr class="filter-row">
-                <th></th>
-                <th><input id="filter-our-price" oninput="handleFilter()" placeholder="Price..."
-                        style="width:100%; box-sizing:border-box; text-align:right;"></th>
-                <th><input id="filter-mysklad" oninput="handleFilter()" placeholder="Price..."
-                        style="width:100%; box-sizing:border-box; text-align:right;"></th>
-                <th></th>
-                <th></th>
-            </tr>
+            <!-- Filter row removed and moved to toolbar -->
         </thead>
         <tbody id="resultsBody">
             {% for item in items %}
@@ -196,12 +196,31 @@
     function parseFilterInput(val) {
         if (!val) return {};
         val = val.trim();
-        if (val.toLowerCase().startsWith('q')) {
-            let qVal = val.substring(1).trim();
-            if (qVal.startsWith(':')) qVal = qVal.substring(1).trim();
-            return { qty: qVal };
+
+        let qty = null;
+        let price = null;
+
+        // Try to find quantity pattern (q>... or q:...)
+        // Regex looks for 'q' followed optionally by operator, then numbers
+        const qtyMatch = val.match(/q\s*([<>=!:]+)?\s*(\d+)/i);
+        if (qtyMatch) {
+            let op = qtyMatch[1] || '';
+            if (op === ':') op = '='; // treat q:10 as q=10
+            qty = (op + qtyMatch[2]).trim();
+
+            // Remove the qty part from the string to get price
+            val = val.replace(qtyMatch[0], '').trim();
         }
-        return { price: val };
+
+        if (val) {
+            price = val;
+        }
+
+        const result = {};
+        if (price) result.price = price;
+        if (qty) result.qty = qty;
+
+        return result;
     }
 
     function fetchData(page = 1) {
