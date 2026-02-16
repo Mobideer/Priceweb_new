@@ -64,13 +64,32 @@
 <table>
     <thead>
         <tr>
-            <th>Date</th>
+            <th style="cursor: pointer;" onclick="handleSort('date')">Date <span id="sort-date"
+                    class="sort-icon">⇅</span></th>
             <th>Type</th>
-            <th>SKU</th>
+            <th style="cursor: pointer;" onclick="handleSort('sku')">SKU/Name <span id="sort-sku"
+                    class="sort-icon">⇅</span></th>
             <th>Name</th>
-            <th>Old Price <span style="font-weight:normal; font-size:0.8em">(Supplier)</span></th>
-            <th>New Price <span style="font-weight:normal; font-size:0.8em">(Supplier)</span></th>
-            <th>Change %</th>
+            <th style="text-align: right; cursor: pointer;" onclick="handleSort('old_price')">Old Price <span
+                    id="sort-old_price" class="sort-icon">⇅</span></th>
+            <th style="text-align: right; cursor: pointer;" onclick="handleSort('new_price')">New Price <span
+                    id="sort-new_price" class="sort-icon">⇅</span></th>
+            <th style="text-align: right; cursor: pointer;" onclick="handleSort('diff')">Change % <span id="sort-diff"
+                    class="sort-icon">⇅</span></th>
+            <th></th>
+        </tr>
+        <tr class="filter-row">
+            <th><input id="filter-date" oninput="handleFilter()" placeholder="Date..."
+                    style="width:100%; box-sizing:border-box;"></th>
+            <th></th>
+            <th colspan="2"><input id="filter-sku" oninput="handleFilter()" placeholder="Filter Name or SKU..."
+                    style="width:100%; box-sizing:border-box;"></th>
+            <th><input id="filter-old-price" oninput="handleFilter()" placeholder="Price..."
+                    style="width:100%; box-sizing:border-box; text-align:right;"></th>
+            <th><input id="filter-new-price" oninput="handleFilter()" placeholder="Price..."
+                    style="width:100%; box-sizing:border-box; text-align:right;"></th>
+            <th><input id="filter-diff" oninput="handleFilter()" placeholder=">10 or <-5"
+                    style="width:100%; box-sizing:border-box; text-align:right;"></th>
             <th></th>
         </tr>
     </thead>
@@ -180,13 +199,25 @@
 </div>
 {% endif %}
 
+<script src="{{ url_for('static', filename='js/table_filters.js') }}"></script>
 <script>
+    // Initialize data
+    let currentData = {{ items | tojson | safe }};
+    let currentSort = { column: null, asc: true };
+    const resultsBody = document.getElementById('resultsBody');
+
+    // Initial render
+    document.addEventListener('DOMContentLoaded', () => {
+        renderResults(currentData);
+    });
+
     function toggleDetails(id) {
         const row = document.getElementById('details-' + id);
-        row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
     }
 
     function showHistory(sku, uniqueId, days = 7) {
+        // ... (existing showHistory logic)
         const container = document.getElementById('history-' + uniqueId);
         const detailsRow = document.getElementById('details-' + uniqueId);
 
@@ -204,6 +235,178 @@
             .then(html => { container.innerHTML = html; })
             .catch(err => { container.innerHTML = '<div style="color: #f44336; padding: 10px;">Ошибка: ' + err + '</div>'; });
     }
+
+    function handleFilter() {
+        const filters = {
+            date: document.getElementById('filter-date')?.value.toLowerCase() || '',
+            sku: document.getElementById('filter-sku')?.value.toLowerCase() || '',
+            old_price: document.getElementById('filter-old-price')?.value || '',
+            new_price: document.getElementById('filter-new-price')?.value || '',
+            diff: document.getElementById('filter-diff')?.value || ''
+        };
+
+        let filteredItems = currentData.filter(item => {
+            if (filters.date && !item.date.toLowerCase().includes(filters.date)) return false;
+
+            // SKU or Name
+            if (filters.sku) {
+                const term = filters.sku;
+                if (!item.sku.toLowerCase().includes(term) && !item.name.toLowerCase().includes(term)) return false;
+            }
+
+            if (!FilterUtils.checkPriceOrQty(filters.old_price, item.old_price, 0)) return false; // No qty for old price easily avail
+            if (!FilterUtils.checkPriceOrQty(filters.new_price, item.new_price, 0)) return false;
+
+            if (filters.diff) {
+                // Filter by Diff %, allow operators
+                if (!FilterUtils.parseOperator(filters.diff, item.diff_pct)) return false;
+            }
+
+            return true;
+        });
+
+        // Apply Sorting
+        if (currentSort.column) {
+            filteredItems.sort((a, b) => {
+                let valA = getSortValue(a, currentSort.column);
+                let valB = getSortValue(b, currentSort.column);
+
+                if (typeof valA === 'number' && typeof valB === 'number') {
+                    return currentSort.asc ? valA - valB : valB - valA;
+                }
+                valA = String(valA).toLowerCase();
+                valB = String(valB).toLowerCase();
+                if (valA < valB) return currentSort.asc ? -1 : 1;
+                if (valA > valB) return currentSort.asc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        renderResults(filteredItems);
+    }
+
+    function getSortValue(item, column) {
+        switch (column) {
+            case 'date': return item.date;
+            case 'sku': return item.name; // Sort by name effectively
+            case 'old_price': return item.old_price;
+            case 'new_price': return item.new_price;
+            case 'diff': return item.diff_pct;
+            default: return '';
+        }
+    }
+
+    function handleSort(column) {
+        if (currentSort.column === column) {
+            currentSort.asc = !currentSort.asc;
+        } else {
+            currentSort.column = column;
+            currentSort.asc = true;
+        }
+        updateSortIcons();
+        handleFilter(); // Re-apply filters and sort
+    }
+
+    function updateSortIcons() {
+        document.querySelectorAll('.sort-icon').forEach(el => el.textContent = '⇅');
+        if (currentSort.column) {
+            const el = document.getElementById('sort-' + currentSort.column);
+            if (el) el.textContent = currentSort.asc ? '▲' : '▼';
+        }
+    }
+
+    function renderResults(items) {
+        if (!items || items.length === 0) {
+            resultsBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">No matching records</td></tr>';
+            document.querySelector('.total-summary b').textContent = '0';
+            return;
+        }
+
+        document.querySelector('.total-summary b').textContent = items.length;
+        let html = '';
+
+        items.forEach((item, index) => {
+            const uniqueId = item.sku + '_' + index;
+            // Reconstruct HTML for row
+            const typeBadge = item.type === 'min_price'
+                ? '<span style="background: rgba(33, 150, 243, 0.2); color: #64b5f6; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">Market</span>'
+                : '<span style="background: rgba(76, 175, 80, 0.2); color: #81c784; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">Our</span>';
+
+            const diffDisplay = item.diff_pct > 0
+                ? `<span style="color: #f44336">+${item.diff_pct}% 📈</span>`
+                : `<span style="color: #4caf50">${item.diff_pct}% 📉</span>`;
+
+            // We need to parse suppliers again for the details row
+            let suppliersHtml = '';
+            try {
+                let suppliers = JSON.parse(item.suppliers_json || '[]');
+                suppliers = suppliers.filter(s => s.supplier.toLowerCase() !== 'мой склад');
+                suppliers.sort((a, b) => {
+                    const aStock = a.qty > 0 ? 1 : 0;
+                    const bStock = b.qty > 0 ? 1 : 0;
+                    if (aStock !== bStock) return bStock - aStock;
+                    return a.price - b.price;
+                });
+
+                suppliers.forEach(s => {
+                    const priceDisplay = s.currency !== 'RUB'
+                        ? `<span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">${s.original_price} ${s.currency}</span> <span style="margin: 0 4px; opacity: 0.5;">→</span> ${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`
+                        : `${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`;
+
+                    suppliersHtml += `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: 6px 8px;">${s.supplier}</td>
+                        <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">${s.supplier_sku || ''}</td>
+                        <td style="padding: 6px 8px; text-align: right; font-weight: bold;">${priceDisplay}</td>
+                        <td style="padding: 6px 8px; text-align: right; color: ${s.qty > 0 ? '#4caf50' : '#f44336'};">${s.qty}</td>
+                    </tr>`;
+                });
+            } catch (e) { console.error(e); }
+
+            html += `
+            <tr class="product-row" onclick="toggleDetails('${uniqueId}')" style="cursor: pointer;">
+                <td style="white-space: nowrap; color: #8b949e; font-size: 0.9em;">${item.date}</td>
+                <td>${typeBadge}</td>
+                <td class="mono" onclick="event.stopPropagation()"><a href="/?q=${item.sku}">${item.sku}</a></td>
+                <td>${item.name}</td>
+                <td style="text-align: right; opacity: 0.7;">
+                    <div>${item.old_price}</div>
+                    <div style="font-size: 0.8em; color: #8b949e;">${item.old_supplier}</div>
+                </td>
+                <td style="text-align: right; font-weight: bold;">
+                    <div>${item.new_price}</div>
+                    <div style="font-size: 0.8em; color: #8b949e;">${item.new_supplier}</div>
+                </td>
+                <td style="text-align: right;">${diffDisplay}</td>
+                <td style="text-align: center; vertical-align: middle;">
+                    <button class="btn-action" style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
+                </td>
+            </tr>
+            <tr id="details-${uniqueId}" class="details-row" style="display: none;">
+                <td colspan="8" style="padding: 10px 20px; border-bottom: 2px solid var(--border-color); background: rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="margin: 0; opacity: 0.8;">Текущие предложения (Latest)</h4>
+                        <button class="btn-action" onclick="showHistory('${item.sku}', '${uniqueId}')"
+                            style="background: var(--bg-card); border: 1px solid var(--accent-color); color: var(--accent-color); cursor: pointer; border-radius: 4px; padding: 6px 12px; font-weight: bold;">📊 Показать историю цен</button>
+                    </div>
+                    <table class="suppliers-table" style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <th style="text-align: left; padding: 8px;">Поставщик</th>
+                                <th style="text-align: left; padding: 8px;">Артикул</th>
+                                <th style="text-align: right; padding: 8px;">Цена</th>
+                                <th style="text-align: right; padding: 8px;">кол-во</th>
+                            </tr>
+                        </thead>
+                        <tbody>${suppliersHtml}</tbody>
+                    </table>
+                    <div id="history-${uniqueId}" style="margin-top: 15px; display: none;"></div>
+                </td>
+            </tr>`;
+        });
+        resultsBody.innerHTML = html;
+    }
+
 </script>
 
 {% endblock %}
