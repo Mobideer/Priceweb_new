@@ -52,15 +52,72 @@
         <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
         <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
     </select>
+    </select>
+    <button type="button" onclick="clearFilters()" class="btn-page"
+        style="flex: 0 0 auto; border: 1px solid var(--danger-color); color: var(--danger-color); background: transparent;">✖
+        Clear</button>
     <button type="submit" class="primary" style="flex: 0 0 auto;">Search</button>
 </form>
+
+<script>
+    function clearFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('filter-our-price').value = '';
+        document.getElementById('filter-mysklad').value = '';
+        fetchData(1);
+    }
+</script>
 
 <div class="table-container">
     <table>
         <thead>
+            <style>
+                .dropdown {
+                    position: relative;
+                    display: inline-block;
+                }
+
+                .dropdown-content {
+                    display: none;
+                    position: absolute;
+                    background-color: var(--bg-card);
+                    min-width: 160px;
+                    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+                    z-index: 1;
+                    border: 1px solid var(--border-color);
+                    border-radius: 4px;
+                    left: 0;
+                    top: 100%;
+                }
+
+                .dropdown-content div {
+                    color: var(--text-color);
+                    padding: 12px 16px;
+                    text-decoration: none;
+                    display: block;
+                    cursor: pointer;
+                }
+
+                .dropdown-content div:hover {
+                    background-color: var(--hover-color);
+                }
+
+                .show {
+                    display: block;
+                }
+            </style>
             <tr>
-                <th style="width: 35%; cursor: pointer;" onclick="handleSort('sku')">
-                    Product <span id="sort-sku" class="sort-icon">⇅</span>
+                <th style="width: 35%;">
+                    <div class="dropdown">
+                        <span onclick="toggleSortMenu()" style="cursor: pointer; user-select: none;">
+                            Product <span id="sort-indicator">▼</span>
+                        </span>
+                        <div id="sortDropdown" class="dropdown-content">
+                            <div onclick="handleSort('sku'); toggleSortMenu()">By SKU/Article</div>
+                            <div onclick="handleSort('name'); toggleSortMenu()">By Name</div>
+                            <div onclick="handleSort('created_at'); toggleSortMenu()">By Date Created</div>
+                        </div>
+                    </div>
                 </th>
                 <th style="width: 20%; cursor: pointer; text-align: right;" onclick="handleSort('our_price')">
                     Our Price <span id="sort-our_price" class="sort-icon">⇅</span>
@@ -318,6 +375,23 @@
             searchTimeout = setTimeout(() => fetchData(1), 600);
         });
     });
+
+    function toggleSortMenu() {
+        document.getElementById("sortDropdown").classList.toggle("show");
+    }
+
+    // Close the dropdown if the user clicks outside of it
+    window.onclick = function (event) {
+        if (!event.target.matches('.dropdown span') && !event.target.matches('.dropdown span *')) {
+            var dropdowns = document.getElementsByClassName("dropdown-content");
+            for (var i = 0; i < dropdowns.length; i++) {
+                var openDropdown = dropdowns[i];
+                if (openDropdown.classList.contains('show')) {
+                    openDropdown.classList.remove('show');
+                }
+            }
+        }
+    }
 
     function handleSort(column) {
         if (currentSort.column === column) {
