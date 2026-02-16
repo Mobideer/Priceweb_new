@@ -217,6 +217,7 @@ class StatsHelper:
         self.snap_added = 0
         self.new_item_names = []
         self.sharp_changes = []
+        self.seen_skus = set()
 
 def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
     stats.total_count += 1
@@ -228,6 +229,7 @@ def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
         return
 
     sku = it['sku']
+    stats.seen_skus.add(sku)
     supp_json = json.dumps(it['suppliers'], ensure_ascii=False)
     
     curr_vals = (
@@ -276,7 +278,6 @@ def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
             my_sklad_price=?, my_sklad_qty=?,
             min_sup_price=?, min_sup_qty=?, min_sup_supplier=?,
             suppliers_json=?, updated_at=?
-            WHERE sku=?
             WHERE sku=?
         """, (it['name'], it['our_price'], it['our_qty'],
               it['my_sklad_price'], it['my_sklad_qty'],
@@ -434,6 +435,28 @@ def run():
             if stats_helper.sharp_changes:
                 log_with_timestamp(f"Found {len(stats_helper.sharp_changes)} sharp price changes. Sending notification...")
                 notify.notify_price_changes(stats_helper.sharp_changes)
+
+            # Check for missing items (deleted from feed)
+            if existing: # Only check if we had existing items
+                missing_skus = set(existing.keys()) - stats_helper.seen_skus
+                if missing_skus:
+                    log_with_timestamp(f"Found {len(missing_skus)} missing items (present in DB but not in feed).")
+                    missing_items_list = []
+                    for sku in missing_skus:
+                        # existing[sku] is (name, suppliers_json, ...)
+                        # Based on db.load_existing_latest, index 0 is name
+                        name = existing[sku][0]
+                        missing_items_list.append({"sku": sku, "name": name})
+                    
+                    # Save to file for bot to handle
+                    missing_file = "data/missing_items.json"
+                    try:
+                        with open(missing_file, 'w', encoding='utf-8') as f:
+                            json.dump(missing_items_list, f, ensure_ascii=False, indent=2)
+                        
+                        notify.notify_missing_items(missing_items_list)
+                    except Exception as e:
+                        log_with_timestamp(f"Failed to save missing items: {e}")
                 
             log_with_timestamp(json.dumps(stats))
 

@@ -22,7 +22,7 @@ def get_now_str() -> str:
             pass
     return time.strftime('%Y-%m-%d %H:%M:%S')
 
-def send(text: str, alert_key: Optional[str] = None) -> None:
+def send(text: str, alert_key: Optional[str] = None, reply_markup: Optional[dict] = None) -> None:
     """
     Sends a message to Telegram.
     Respects TG_SILENT environment variable.
@@ -56,9 +56,11 @@ def send(text: str, alert_key: Optional[str] = None) -> None:
         "parse_mode": "HTML",
         "disable_web_page_preview": True
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     
     try:
-        resp = requests.post(url, data=payload, timeout=10)
+        resp = requests.post(url, json=payload, timeout=10)
         if not resp.ok:
             err = f"Telegram API Error: {resp.status_code} - {resp.text}"
             print(f"[TG_NOTIFY] {err}")
@@ -122,3 +124,31 @@ def notify_price_changes(changes: list) -> None:
         msg += f"\n<i>...и еще {len(changes) - MAX_ITEMS} товаров.</i>"
         
     send(msg)
+
+def notify_missing_items(missing_items: list) -> None:
+    """
+    Sends a report about items missing from the feed (likely deleted).
+    """
+    if not missing_items:
+        return
+
+    msg = f"🗑️ <b>Обнаружено {len(missing_items)} удаленных товаров:</b>\n"
+    
+    for item in missing_items[:10]:
+        msg += f"• {item['name']} ({item['sku']})\n"
+        
+    if len(missing_items) > 10:
+        msg += f"<i>...и еще {len(missing_items) - 10} шт.</i>\n"
+        
+    msg += "\n<b>Удалить их из базы данных?</b>"
+    
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "❌ Удалить из БД", "callback_data": "delete_missing"},
+                {"text": "Пропустить", "callback_data": "ignore_missing"}
+            ]
+        ]
+    }
+    
+    send(msg, reply_markup=keyboard)

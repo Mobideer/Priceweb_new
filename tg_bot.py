@@ -162,6 +162,41 @@ def handle_callback(cb: Dict[str, Any]) -> None:
         tg_send(chat_id, get_db_status_text(), reply_markup=make_keyboard())
     elif data == "show_debug":
         tg_send(chat_id, get_debug_text(), reply_markup=make_keyboard())
+    elif data == "delete_missing":
+        missing_file = "data/missing_items.json"
+        if not os.path.exists(missing_file):
+            tg_send(chat_id, "❌ Файл со списком удаления не найден.", reply_markup=make_keyboard())
+            return
+            
+        try:
+            with open(missing_file, 'r', encoding='utf-8') as f:
+                items = json.load(f)
+            
+            if not items:
+                tg_send(chat_id, "⚠️ Список пуст.", reply_markup=make_keyboard())
+                return
+                
+            conn = db.get_connection()
+            count = 0
+            for item in items:
+                sku = item['sku']
+                conn.execute("DELETE FROM items_latest WHERE sku = ?", (sku,))
+                conn.execute("DELETE FROM item_snapshots WHERE sku = ?", (sku,))
+                count += 1
+            conn.commit()
+            conn.close()
+            
+            os.remove(missing_file)
+            tg_send(chat_id, f"✅ Удалено <b>{count}</b> товаров из базы данных.", reply_markup=make_keyboard())
+            
+        except Exception as e:
+            tg_send(chat_id, f"❌ Ошибка удаления: {e}", reply_markup=make_keyboard())
+            
+    elif data == "ignore_missing":
+        missing_file = "data/missing_items.json"
+        if os.path.exists(missing_file):
+            os.remove(missing_file)
+        tg_send(chat_id, "👌 Список пропущен.", reply_markup=make_keyboard())
 
 def main():
     print("🤖 Бот запущен...")
