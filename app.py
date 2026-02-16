@@ -188,7 +188,24 @@ def _get_items(q: str = "", limit: int = 20, sort_by: str = "created_at", sort_a
     finally:
         conn.close()
 
-# ... (augment item stays same)
+def _augment_item_with_stats(item_dict):
+    """Adds supplier stats (available/total) to the item dictionary."""
+    try:
+        sups = json.loads(item_dict.get('suppliers_json', '[]'))
+        total = 0
+        in_stock = 0
+        for s in sups:
+            name = s.get('supplier', '').strip().lower()
+            if not name or name == 'мой склад':
+                continue
+            total += 1
+            if float(s.get('qty', 0)) > 0:
+                in_stock += 1
+        # Always return a string to distinguish from missing field
+        item_dict['sup_stats'] = f"({in_stock}/{total})"
+    except Exception:
+        item_dict['sup_stats'] = "(err)"
+    return item_dict
 
 @app.route('/api/search')
 def api_search():
