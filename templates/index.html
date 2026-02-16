@@ -51,11 +51,30 @@
     <table>
         <thead>
             <tr>
-                <th style="width: 50%;"></th>
-                <th style="text-align: right;">Наша цена</th>
-                <th style="text-align: right;">Мой Склад</th>
-                <th style="text-align: right;">Поставщик</th>
+                <th style="width: 40%; cursor: pointer;" onclick="handleSort('product')">
+                    Product <span id="sort-product" class="sort-icon">⇅</span>
+                </th>
+                <th style="text-align: right; cursor: pointer;" onclick="handleSort('our_price')">
+                    Наша цена <span id="sort-our_price" class="sort-icon">⇅</span>
+                </th>
+                <th style="text-align: right; cursor: pointer;" onclick="handleSort('mysklad')">
+                    Мой Склад <span id="sort-mysklad" class="sort-icon">⇅</span>
+                </th>
+                <th style="text-align: right; cursor: pointer;" onclick="handleSort('supplier')">
+                    Поставщик <span id="sort-supplier" class="sort-icon">⇅</span>
+                </th>
                 <th style="text-align: center;"></th>
+            </tr>
+            <tr class="filter-row">
+                <th><input id="filter-product" oninput="handleFilter()" placeholder="Filter Name/SKU..."
+                        style="width:100%; box-sizing:border-box;"></th>
+                <th><input id="filter-our-price" oninput="handleFilter()" placeholder="Price..."
+                        style="width:100%; box-sizing:border-box; text-align:right;"></th>
+                <th><input id="filter-mysklad" oninput="handleFilter()" placeholder="Price..."
+                        style="width:100%; box-sizing:border-box; text-align:right;"></th>
+                <th><input id="filter-supplier" oninput="handleFilter()" placeholder="Supplier..."
+                        style="width:100%; box-sizing:border-box; text-align:right;"></th>
+                <th></th>
             </tr>
         </thead>
         <tbody id="resultsBody">
@@ -177,7 +196,8 @@
             fetch(`/api/search?q=${encodeURIComponent(q)}&limit={{ limit }}`)
                 .then(r => r.json())
                 .then(data => {
-                    renderResults(data.items);
+                    currentData = data.items || [];
+                    renderResults(currentData);
                 });
         }, 500);
     });
@@ -188,9 +208,50 @@
             return;
         }
 
+        // --- Filtering Logic ---
+        const filters = {
+            product: document.getElementById('filter-product')?.value.toLowerCase() || '',
+            our_price: document.getElementById('filter-our-price')?.value || '',
+            mysklad: document.getElementById('filter-mysklad')?.value || '',
+            supplier: document.getElementById('filter-supplier')?.value.toLowerCase() || ''
+        };
+
+        let filteredItems = items.filter(item => {
+            if (filters.product && !item.name.toLowerCase().includes(filters.product) && !item.sku.toLowerCase().includes(filters.product)) return false;
+            // Simple logic for price filters: > value. Can be improved.
+            // For now, let's treat price inputs as "matches text" for simplicity or numbers?
+            // User requested "filtering", usually text match or ranges. simple includes for now.
+            if (filters.our_price && !String(item.our_price).includes(filters.our_price)) return false;
+            if (filters.mysklad && !String(item.my_sklad_price).includes(filters.mysklad)) return false;
+            if (filters.supplier && !(item.min_sup_supplier || '').toLowerCase().includes(filters.supplier)) return false;
+            return true;
+        });
+
+        // --- Sorting Logic ---
+        if (currentSort.column) {
+            filteredItems.sort((a, b) => {
+                let valA = getSortValue(a, currentSort.column);
+                let valB = getSortValue(b, currentSort.column);
+
+                if (typeof valA === 'number' && typeof valB === 'number') {
+                    return currentSort.asc ? valA - valB : valB - valA;
+                }
+                valA = String(valA).toLowerCase();
+                valB = String(valB).toLowerCase();
+                if (valA < valB) return currentSort.asc ? -1 : 1;
+                if (valA > valB) return currentSort.asc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        if (filteredItems.length === 0) {
+            resultsBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No results matching filters</td></tr>';
+            return;
+        }
+
         let html = '';
-        items.forEach(item => {
-            let suppliers = JSON.parse(item.suppliers_json);
+        filteredItems.forEach(item => {
+            let suppliers = JSON.parse(item.suppliers_json || '[]');
 
             // Filter My Sklad
             suppliers = suppliers.filter(s => s.supplier.toLowerCase() !== 'мой склад');
@@ -270,6 +331,44 @@
         });
         resultsBody.innerHTML = html;
     }
+
+    // Sorting State
+    let currentSort = { column: null, asc: true };
+    let currentData = []; // Store current set of items
+
+    function getSortValue(item, column) {
+        switch (column) {
+            case 'product': return item.name;
+            case 'our_price': return item.our_price;
+            case 'mysklad': return item.my_sklad_price;
+            case 'supplier': return item.min_sup_price || 999999999;
+            default: return '';
+        }
+    }
+
+    function handleSort(column) {
+        if (currentSort.column === column) {
+            currentSort.asc = !currentSort.asc;
+        } else {
+            currentSort.column = column;
+            currentSort.asc = true;
+        }
+        updateSortIcons();
+        renderResults(currentData); // Re-render with sort
+    }
+
+    function updateSortIcons() {
+        document.querySelectorAll('.sort-icon').forEach(el => el.textContent = '⇅');
+        if (currentSort.column) {
+            const el = document.getElementById('sort-' + currentSort.column);
+            if (el) el.textContent = currentSort.asc ? '▲' : '▼';
+        }
+    }
+
+    function handleFilter() {
+        renderResults(currentData);
+    }
+
 
     function toggleDetails(sku) {
         const row = document.getElementById('details-' + sku);
