@@ -216,6 +216,7 @@ class StatsHelper:
         self.changed = 0
         self.snap_added = 0
         self.new_item_names = []
+        self.sharp_changes = []
 
 def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
     stats.total_count += 1
@@ -276,12 +277,54 @@ def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
             min_sup_price=?, min_sup_qty=?, min_sup_supplier=?,
             suppliers_json=?, updated_at=?
             WHERE sku=?
+            WHERE sku=?
         """, (it['name'], it['our_price'], it['our_qty'],
               it['my_sklad_price'], it['my_sklad_qty'],
               it['min_sup_price'], it['min_sup_qty'], it['min_sup_supplier'],
               supp_json, ts, sku))
         stats.changed += 1
-
+        
+        # Check for sharp price changes (only if not new)
+        try:
+            # Check min_sup_price
+            old_min = float(prev[7] if prev[7] is not None else 0) # index 7 is min_sup_price
+            new_min = float(it['min_sup_price'] if it['min_sup_price'] is not None else 0)
+            
+            if old_min > 0 and new_min > 0:
+                diff_pct = (new_min - old_min) / old_min * 100.0
+                if abs(diff_pct) >= 30.0:
+                    stats.sharp_changes.append({
+                        "name": it['name'],
+                        "sku": sku,
+                        "old_price": old_min,
+                        "new_price": new_min,
+                        "diff_pct": diff_pct,
+                        "type": "min_price"
+                    })
+                    
+            # Check our_price
+            old_our = float(prev[3] if prev[3] is not None else 0) # index 3 is our_price
+            new_our = float(it['our_price'] if it['our_price'] is not None else 0)
+            
+            if old_our > 0 and new_our > 0:
+                 diff_pct_our = (new_our - old_our) / old_our * 100.0
+                 if abs(diff_pct_our) >= 30.0:
+                      # Avoid duplicates if min_price already added? No, track separately if needed.
+                      # But let's prioritize min_price if both changed, or just add both.
+                      # Actually, let's just add it if it wasn't already added for min_price
+                      # or better, just treat them as separate events if needed.
+                      # For simplicity and to avoid spam, we'll just add it to the list.
+                      stats.sharp_changes.append({
+                        "name": it['name'],
+                        "sku": sku,
+                        "old_price": old_our,
+                        "new_price": new_our,
+                        "diff_pct": diff_pct_our,
+                        "type": "our_price"
+                    })
+        except Exception as e:
+            # Don't fail the worker for this
+            pass
 def run():
     host = os.uname().nodename
     notify.notify_start(host)
@@ -386,6 +429,12 @@ def run():
                 pass
 
             notify.notify_success(stats)
+            
+            # Notify about sharp price changes
+            if stats_helper.sharp_changes:
+                log_with_timestamp(f"Found {len(stats_helper.sharp_changes)} sharp price changes. Sending notification...")
+                notify.notify_price_changes(stats_helper.sharp_changes)
+                
             log_with_timestamp(json.dumps(stats))
 
         finally:

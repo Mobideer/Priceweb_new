@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Report: Price Changes - PriceWeb New{% endblock %}
+
+{% block content %}
+<h2>Report: Price Changes</h2>
+<div style="color:#8b949e; margin-bottom:10px;">
+    Shows items with price changes > {{ threshold }}% over the last {{ days }} days.
+</div>
+
+<form class="toolbar" method="get">
+    <div>
+        <label>Threshold %</label>
+        <input name="threshold" value="{{ threshold }}" style="width: 80px;">
+    </div>
+    <div>
+        <label>Days Lookback</label>
+        <input name="days" value="{{ days }}" style="width: 80px;">
+    </div>
+    <button type="submit" class="primary">Update</button>
+</form>
+
+<div class="total-summary">
+    Found: <b>{{ items|length }}</b> events
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>SKU</th>
+            <th>Name</th>
+            <th>Old Price</th>
+            <th>New Price</th>
+            <th>Change %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr class="product-row">
+            <td style="white-space: nowrap; color: #8b949e; font-size: 0.9em;">
+                {{ item.date }}
+            </td>
+            <td>
+                {% if item.type == 'min_price' %}
+                <span
+                    style="background: rgba(33, 150, 243, 0.2); color: #64b5f6; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">Market</span>
+                {% else %}
+                <span
+                    style="background: rgba(76, 175, 80, 0.2); color: #81c784; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">Our</span>
+                {% endif %}
+            </td>
+            <td class="mono">
+                <a href="/?q={{ item.sku }}">{{ item.sku }}</a>
+            </td>
+            <td>{{ item.name }}</td>
+            <td style="text-align: right; opacity: 0.7;">
+                {{ item.old_price }}
+            </td>
+            <td style="text-align: right; font-weight: bold;">
+                {{ item.new_price }}
+            </td>
+            <td style="text-align: right;">
+                {% if item.diff_pct > 0 %}
+                <span style="color: #f44336">+{{ item.diff_pct }}% 📈</span>
+                {% else %}
+                <span style="color: #4caf50">{{ item.diff_pct }}% 📉</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if not items %}
+<div style="text-align: center; padding: 40px; color: #8b949e;">
+    No sharp price changes found in this period.
+</div>
+{% endif %}
+
+{% endblock %}

@@ -470,6 +470,92 @@ def report_markup():
     finally:
         conn.close()
 
+@app.route('/reports/changes')
+@login_required
+def report_changes():
+    days = request.args.get('days', 7, type=int)
+    threshold = request.args.get('threshold', 30.0, type=float)
+    
+    conn = db.get_connection()
+    try:
+        cutoff = int(time.time()) - days * 86400
+        
+        # Get snapshots for the period, ensuring we have enough data (at least 2 per item)
+        # We need name too, so join with items_latest or just fetch it
+        query = """
+            SELECT s.sku, s.ts, s.min_sup_price, s.our_price, i.name
+            FROM item_snapshots s
+            LEFT JOIN items_latest i ON s.sku = i.sku
+            WHERE s.ts >= ?
+            ORDER BY s.sku, s.ts ASC
+        """
+        rows = conn.execute(query, (cutoff,)).fetchall()
+        
+        changes = []
+        
+        # Group by SKU
+        from itertools import groupby
+        from operator import itemgetter
+        
+        for sku, group in groupby(rows, key=itemgetter('sku')):
+            snaps = list(group)
+            if len(snaps) < 2:
+                continue
+                
+            name = snaps[0]['name'] or sku
+            
+            # Iterate through snapshots to find changes
+            for i in range(1, len(snaps)):
+                prev = snaps[i-1]
+                curr = snaps[i]
+                
+                # Check min_sup_price
+                p_prev = prev['min_sup_price'] or 0
+                p_curr = curr['min_sup_price'] or 0
+                
+                if p_prev > 0 and p_curr > 0:
+                    diff_pct = (p_curr - p_prev) / p_prev * 100.0
+                    if abs(diff_pct) >= threshold:
+                        changes.append({
+                            'sku': sku,
+                            'name': name,
+                            'ts': curr['ts'],
+                            'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
+                            'old_price': p_prev,
+                            'new_price': p_curr,
+                            'diff_pct': round(diff_pct, 1),
+                            'type': 'min_price' # Market Price
+                        })
+                        continue # Don't report same item twice for same timestamp if both changed (prioritize market)
+
+                # Check our_price
+                p_prev_our = prev['our_price'] or 0
+                p_curr_our = curr['our_price'] or 0
+                
+                if p_prev_our > 0 and p_curr_our > 0:
+                    diff_pct = (p_curr_our - p_prev_our) / p_prev_our * 100.0
+                    if abs(diff_pct) >= threshold:
+                        changes.append({
+                            'sku': sku,
+                            'name': name,
+                            'ts': curr['ts'],
+                            'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
+                            'old_price': p_prev_our,
+                            'new_price': p_curr_our,
+                            'diff_pct': round(diff_pct, 1),
+                            'type': 'our_price' # Our Price
+                        })
+
+        # Sort by latest change first, then largest change
+        changes.sort(key=lambda x: (x['ts'], abs(x['diff_pct'])), reverse=True)
+        
+        return render_template('report_changes.html',
+                               items=changes,
+                               days=days,
+                               threshold=threshold)
+    finally:
+        conn.close()
+
 @app.route('/api/reload')
 def api_reload():
     token = request.args.get('token', '')

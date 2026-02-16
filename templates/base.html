@@ -25,6 +25,7 @@
             <a href="/" class="{% if request.path == '/' %}active{% endif %}">Dashboard</a>
             <a href="/reports/spread" class="{% if 'spread' in request.path %}active{% endif %}">Report: Spread</a>
             <a href="/reports/markup" class="{% if 'markup' in request.path %}active{% endif %}">Report: Markup</a>
+            <a href="/reports/changes" class="{% if 'changes' in request.path %}active{% endif %}">Report: Changes</a>
             <button id="theme-toggle" title="Toggle Light/Dark Theme"
                 style="background: none; border: none; font-size: 1.25rem; cursor: pointer; margin-left: 20px; padding: 0; line-height: 1;">🌓</button>
             <a href="/logout" style="margin-left: 20px; color: var(--danger-color); opacity: 0.8;">Logout</a>

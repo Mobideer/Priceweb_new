@@ -97,3 +97,28 @@ def notify_success(stats: dict) -> None:
 
 def notify_fail(error: str) -> None:
     send(f"❌ <b>PriceWeb New Worker FAILED</b>\nError: <code>{error}</code>")
+
+def notify_price_changes(changes: list) -> None:
+    """
+    Sends a report of sharp price changes to Telegram.
+    changes: List of dicts with keys: name, sku, old_price, new_price, diff_pct
+    """
+    if not changes:
+        return
+
+    msg = f"⚠️ <b>Резкое изменение цен ({len(changes)} шт):</b>\n\n"
+    
+    # Send in chunks if too long, but for now just clamp to first 20 items to avoid hitting limits
+    MAX_ITEMS = 20
+    
+    for item in changes[:MAX_ITEMS]:
+        emoji = "📈" if item['new_price'] > item['old_price'] else "📉"
+        msg += (
+            f"{emoji} <b>{item['name']}</b> ({item['sku']})\n"
+            f"   {item['old_price']} ➡️ <b>{item['new_price']}</b> ({item['diff_pct']:+.1f}%)\n"
+        )
+        
+    if len(changes) > MAX_ITEMS:
+        msg += f"\n<i>...и еще {len(changes) - MAX_ITEMS} товаров.</i>"
+        
+    send(msg)
