@@ -66,14 +66,12 @@
                 <th style="width: 5%;"></th>
             </tr>
             <tr class="filter-row">
-                <th><input id="filter-product" oninput="handleFilter()" placeholder="Filter Name/SKU..."
-                        style="width:100%; box-sizing:border-box;"></th>
+                <th></th>
                 <th><input id="filter-our-price" oninput="handleFilter()" placeholder="Price..."
                         style="width:100%; box-sizing:border-box; text-align:right;"></th>
                 <th><input id="filter-mysklad" oninput="handleFilter()" placeholder="Price..."
                         style="width:100%; box-sizing:border-box; text-align:right;"></th>
-                <th><input id="filter-supplier" oninput="handleFilter()" placeholder="Supplier..."
-                        style="width:100%; box-sizing:border-box; text-align:right;"></th>
+                <th></th>
                 <th></th>
             </tr>
         </thead>
@@ -217,9 +215,6 @@
         params.append('sort_asc', currentSort.asc);
 
         // Collect filters
-        const fProduct = document.getElementById('filter-product')?.value || '';
-        if (fProduct && !q) params.set('q', fProduct);
-
         const fOur = document.getElementById('filter-our-price')?.value;
         const pOur = parseFilterInput(fOur);
         if (pOur.price) params.append('our_price', pOur.price);
@@ -229,19 +224,6 @@
         const pMy = parseFilterInput(fMySklad);
         if (pMy.price) params.append('my_sklad_price', pMy.price);
         if (pMy.qty) params.append('my_sklad_qty', pMy.qty);
-
-        const fSup = document.getElementById('filter-supplier')?.value;
-        if (fSup) {
-            if (['>', '<', '=', '!'].some(c => fSup.startsWith(c))) {
-                params.append('min_sup_price', fSup);
-            } else if (fSup.toLowerCase().startsWith('q')) {
-                let qVal = fSup.substring(1).trim();
-                if (qVal.startsWith(':')) qVal = qVal.substring(1).trim();
-                params.append('min_sup_qty', qVal);
-            } else {
-                params.append('min_sup_supplier', fSup);
-            }
-        }
 
         const newUrl = `${window.location.pathname}?${params.toString()}`;
         window.history.replaceState({}, '', newUrl);
@@ -311,7 +293,7 @@
         searchTimeout = setTimeout(() => fetchData(1), 500);
     });
 
-    ['filter-product', 'filter-our-price', 'filter-mysklad', 'filter-supplier'].forEach(id => {
+    ['filter-our-price', 'filter-mysklad'].forEach(id => {
         document.getElementById(id)?.addEventListener('input', () => {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => fetchData(1), 600);
@@ -362,15 +344,18 @@
             const rowClass = hoursDiff > 24 ? 'outdated' : '';
 
             html += `
-            <tr class="${rowClass}">
-                <td class="mono">
-                    <a href="/?q=${item.sku}">${item.sku}</a><br>
-                    <small style="color:#888;">${item.name || ''}</small>
+            <tr class="${rowClass}" style="cursor: pointer;" onclick="toggleDetails('${item.sku}')">
+                <td data-label="Product">
+                    <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">${item.name || ''}</div>
+                    <div style="font-size: 0.85em; opacity: 0.7;">
+                        SKU: <a href="/?q=${item.sku}" style="color: inherit; text-decoration: underline;" onclick="event.stopPropagation()">${item.sku}</a> | 
+                        Created: ${formatTs(item.created_at)} | 
+                        Updated: ${formatTs(item.updated_at)}
+                    </div>
                 </td>
                 <td style="text-align: right;">
                     <div class="price-val">${item.our_price}</div>
                     <div class="qty-val" style="color: ${item.our_qty > 0 ? '#4caf50' : '#f44336'}">${item.our_qty}</div>
-                    <div class="date-val">${formatTs(item.updated_at)}</div>
                 </td>
                 <td style="text-align: right;">
                     <div class="price-val">${msPrice}</div>
@@ -383,7 +368,7 @@
                     <div class="supplier-name">${item.min_sup_supplier || ''}</div>
                 </td>
                 <td style="text-align: center;">
-                    <button class="btn-action" onclick="toggleDetails('${item.sku}')">▼</button>
+                    <button class="btn-action" style="background: transparent; border: 1px solid #888; color: #888; cursor: pointer; border-radius: 4px; padding: 4px 8px;">▼</button>
                 </td>
             </tr>
             <tr id="details-${item.sku}" class="details-row" style="display: none;">
