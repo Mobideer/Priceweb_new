@@ -401,7 +401,8 @@
 
     // Sorting State
     let currentSort = { column: null, asc: true };
-    let currentData = []; // Store current set of items
+    // Initialize with server-side data
+    let currentData = {{ items | tojson | safe }};
 
     function getSortValue(item, column) {
         switch (column) {
