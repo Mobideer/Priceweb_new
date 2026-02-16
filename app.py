@@ -118,7 +118,7 @@ def _parse_filter_value(val):
     except:
         return '=', val # Fallback to string equality if not a number
 
-def _get_items(q: str = "", limit: int = 20, sort_by: str = "created_at", sort_asc: bool = False, filters: Dict = None):
+def _get_items(q: str = "", limit: int = 20, page: int = 1, sort_by: str = "created_at", sort_asc: bool = False, filters: Dict = None):
     conn = db.get_connection()
     try:
         # Whitelist sort columns to prevent SQL injection
@@ -169,22 +169,49 @@ def _get_items(q: str = "", limit: int = 20, sort_by: str = "created_at", sort_a
                     where_clauses.append(f"{col} {op} ?")
                     params.append(num_val)
                 elif col == 'min_sup_supplier':
-                     # Text match for supplier
-                     where_clauses.append(f"lower({col}) LIKE ?")
-                     params.append(f"%{val.lower()}%")
+                     # Search within JSON for supplier with case-insensitive fallback for Cyrillic
+                     v_lower = val.lower()
+                     v_title = val.title()
+                     v_upper = val.upper()
+                     
+                     clause = f"(lower(suppliers_json) LIKE ? OR suppliers_json LIKE ? OR suppliers_json LIKE ?)"
+                     where_clauses.append(clause)
+                     params.append(f"%{v_lower}%")
+                     params.append(f"%{v_title}%")
+                     params.append(f"%{v_upper}%")
         
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
         
+        # Count total matches first
+        count_query = f"SELECT COUNT(*) FROM items_latest WHERE {where_sql}"
+        total_count = conn.execute(count_query, params).fetchone()[0]
+        
+        # Pagination
+        limit = max(1, min(limit, 500)) # Cap limit
+        page = max(1, page)
+        offset = (page - 1) * limit
+        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
+
         query = f"""
             SELECT * FROM items_latest
             WHERE {where_sql}
             ORDER BY {order_col} {order_dir}, sku ASC
-            LIMIT ?
+            LIMIT ? OFFSET ?
         """
         params.append(limit)
+        params.append(offset)
         
         rows = conn.execute(query, params).fetchall()
-        return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
+        
+        result_items = [_augment_item_with_stats(dict(r)) for r in rows]
+        
+        return {
+            "items": result_items,
+            "total_count": total_count,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages
+        }
     finally:
         conn.close()
 
@@ -207,10 +234,13 @@ def _augment_item_with_stats(item_dict):
         item_dict['sup_stats'] = "(err)"
     return item_dict
 
+
+
 @app.route('/api/search')
 def api_search():
     q = request.args.get('q', '').strip()
     limit = request.args.get('limit', 20, type=int)
+    page = request.args.get('page', 1, type=int)
     sort_by = request.args.get('sort_by', 'created_at')
     sort_asc = request.args.get('sort_asc', 'false') == 'true'
     
@@ -223,7 +253,7 @@ def api_search():
         'min_sup_supplier': request.args.get('min_sup_supplier')
     }
     
-    results = _get_items(q, limit, sort_by, sort_asc, filters)
+    results = _get_items(q, limit, page, sort_by, sort_asc, filters)
     return jsonify(results)
 
 @app.route('/')
@@ -245,7 +275,8 @@ def index():
     }
 
     status = _get_status()
-    results = _get_items(q, limit, sort_by, sort_asc, filters)
+    # Pass page=1 for initial load
+    results = _get_items(q, limit, 1, sort_by, sort_asc, filters)
 
     return render_template('index.html', 
                            q=q, 
