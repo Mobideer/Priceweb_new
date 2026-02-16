@@ -172,14 +172,21 @@
     </table>
 </div>
 
+<div id="pagination" style="display: flex; justify-content: center; align-items: center; margin-top: 20px; gap: 10px;">
+    <!-- Pagination will be rendered here -->
+</div>
+
 <script src="{{ url_for('static', filename='js/table_filters.js') }}"></script>
 <script>
     let searchTimeout = null;
     const searchInput = document.getElementById('searchInput');
     const resultsBody = document.getElementById('resultsBody');
+    const paginationContainer = document.getElementById('pagination');
 
     // Default state matches server default
     let currentSort = { column: 'created_at', asc: false };
+    let currentPage = 1;
+    const limit = {{ limit }};
 
     function formatTs(ts) {
         if (!ts) return '-';
@@ -199,11 +206,13 @@
         return { price: val };
     }
 
-    function fetchData() {
+    function fetchData(page = 1) {
+        currentPage = page;
         const q = searchInput.value.trim();
         const params = new URLSearchParams();
         params.append('q', q);
-        params.append('limit', '{{ limit }}');
+        params.append('limit', limit);
+        params.append('page', currentPage);
         params.append('sort_by', currentSort.column);
         params.append('sort_asc', currentSort.asc);
 
@@ -237,22 +246,75 @@
         const newUrl = `${window.location.pathname}?${params.toString()}`;
         window.history.replaceState({}, '', newUrl);
 
+        // Show loading state
+        paginationContainer.innerHTML = '<span style="opacity:0.5;">Loading...</span>';
+        resultsBody.style.opacity = '0.5';
+
         fetch(`/api/search?${params.toString()}`)
             .then(r => r.json())
             .then(data => {
+                resultsBody.style.opacity = '1';
                 renderResults(data.items || []);
+                renderPagination(data);
             });
     }
 
+    function renderPagination(data) {
+        if (!data.total_pages || data.total_pages <= 1) {
+            paginationContainer.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        // Prev button
+        if (data.page > 1) {
+            html += `<button onclick="fetchData(${data.page - 1})" class="btn-page">❮ Prev</button>`;
+        } else {
+            html += `<button class="btn-page" disabled style="opacity:0.5; cursor:default;">❮ Prev</button>`;
+        }
+
+        // Info
+        html += `<span style="margin: 0 15px; font-weight: bold;">Page ${data.page} of ${data.total_pages}</span>`;
+
+        // Next button
+        if (data.page < data.total_pages) {
+            html += `<button onclick="fetchData(${data.page + 1})" class="btn-page">Next ❯</button>`;
+        } else {
+            html += `<button class="btn-page" disabled style="opacity:0.5; cursor:default;">Next ❯</button>`;
+        }
+
+        // Add some basic styles inline or use a class if defined
+        html += `<style>
+            .btn-page {
+                background: var(--bg-card);
+                border: 1px solid var(--border-color);
+                color: var(--text-color);
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            .btn-page:hover:not(:disabled) {
+                background: var(--hover-color);
+                border-color: var(--accent-color);
+            }
+        </style>`;
+
+        paginationContainer.innerHTML = html;
+    }
+
+
+
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(fetchData, 500);
+        searchTimeout = setTimeout(() => fetchData(1), 500);
     });
 
     ['filter-product', 'filter-our-price', 'filter-mysklad', 'filter-supplier'].forEach(id => {
         document.getElementById(id)?.addEventListener('input', () => {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(fetchData, 600);
+            searchTimeout = setTimeout(() => fetchData(1), 600);
         });
     });
 
@@ -268,7 +330,7 @@
             }
         }
         updateSortIcons();
-        fetchData();
+        fetchData(1);
     }
 
     // Alias for compatibility if needed, but handled in init
