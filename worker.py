@@ -74,15 +74,34 @@ def download_if_needed(conn):
         
         resp.raise_for_status()
         
-        # Download to temp file first
-        tmp_file = LOCAL_DATA_FILE + ".tmp"
+        resp.raise_for_status()
+        
+        # Download to temp file first, using PID to avoid collisions
+        tmp_file = f"{LOCAL_DATA_FILE}.tmp.{os.getpid()}"
         log_with_timestamp(f"Downloading new data to {tmp_file}...")
         
-        with open(tmp_file, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                f.write(chunk)
-                
-        os.replace(tmp_file, LOCAL_DATA_FILE)
+        try:
+            with open(tmp_file, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    f.write(chunk)
+                    
+            # Move atomically (replace)
+            # If the destination file is owned by root and we are not root, this might fail too?
+            # But the primary issue is usually opening the temp file for writing if it already exists as root.
+            os.replace(tmp_file, LOCAL_DATA_FILE)
+        except PermissionError:
+            log_with_timestamp(f"Permission denied when writing/moving {tmp_file}. Trying to remove old temp file...")
+            try:
+                if os.path.exists(tmp_file):
+                    os.remove(tmp_file)
+            except:
+                pass
+            raise
+        except Exception:
+            # Cleanup on failure
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
+            raise
         
         new_etag = resp.headers.get('ETag')
         new_mtime = resp.headers.get('Last-Modified')
