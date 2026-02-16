@@ -101,117 +101,134 @@ def _get_status():
     st["version"] = APP_VERSION
     return st
 
-def _search_items(q: str, limit: int = 20):
-    q = (q or "").strip().lower()
+def _parse_filter_value(val):
+    """Parses a filter string like '>100' into (operator, value)."""
+    val = val.strip()
+    op = '='
+    if val.startswith('>='): op, val = '>=', val[2:]
+    elif val.startswith('<='): op, val = '<=', val[2:]
+    elif val.startswith('>'): op, val = '>', val[1:]
+    elif val.startswith('<'): op, val = '<', val[1:]
+    elif val.startswith('='): op, val = '=', val[1:]
+    elif val.startswith('!='): op, val = '!=', val[2:]
+    elif val.startswith('!'): op, val = '!=', val[1:]
+    
+    try:
+        return op, float(val)
+    except:
+        return '=', val # Fallback to string equality if not a number
+
+def _get_items(q: str = "", limit: int = 20, sort_by: str = "created_at", sort_asc: bool = False, filters: Dict = None):
     conn = db.get_connection()
     try:
-        if not q:
-            # Show newest items by default
-            rows = conn.execute("SELECT * FROM items_latest ORDER BY created_at DESC, sku ASC LIMIT ?", (limit,)).fetchall()
-            return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
-            
-        # Simple search matching logic
-        # Priority 1: Exact SKU
-        rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) = ? ORDER BY created_at DESC, sku ASC", (q,)).fetchall()
+        # Whitelist sort columns to prevent SQL injection
+        allowed_sorts = {
+            'created_at': 'created_at',
+            'updated_at': 'updated_at',
+            'sku': 'sku',
+            'name': 'name',
+            'our_price': 'our_price',
+            'our_qty': 'our_qty',
+            'my_sklad_price': 'my_sklad_price',
+            'my_sklad_qty': 'my_sklad_qty',
+            'min_sup_price': 'min_sup_price',
+            'min_sup_qty': 'min_sup_qty',
+            'min_sup_supplier': 'min_sup_supplier'
+        }
+        order_col = allowed_sorts.get(sort_by, 'created_at')
+        order_dir = "ASC" if sort_asc else "DESC"
         
-        if not rows:
-            # Priority 2: SKU starts with
-            rows = conn.execute("SELECT * FROM items_latest WHERE lower(sku) LIKE ? ORDER BY created_at DESC, sku ASC LIMIT ?", (q + '%', limit)).fetchall()
+        where_clauses = []
+        params = []
         
-        if len(rows) < limit:
-            # Priority 3: Multi-word FTS Search (if query has multiple words or no SKU match)
-            # This handles both "word1 word2" and single words not matching SKU exactly
-            rem = limit - len(rows)
-            found_skus = {r['sku'] for r in rows}
-            
-            tokens = [t for t in q.split() if t]
-            if tokens:
-                # 1. Try FTS5 Search first (High performance)
-                # Use prefix matching on every token and explicit AND
-                fts_query = " AND ".join([f"{t}*" for t in tokens])
-                
-                placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
-                sql_fts = f"""
-                    SELECT i.* FROM items_latest i
-                    JOIN items_search s ON i.rowid = s.rowid
-                    WHERE s.items_search MATCH ?
-                      AND i.sku NOT IN ({placeholders})
-                    ORDER BY i.created_at DESC, i.sku ASC
-                    LIMIT ?
-                """
-                try:
-                    cursor = conn.execute(sql_fts, (fts_query, *found_skus, rem))
-                    fts_results = cursor.fetchall()
-                    rows.extend(fts_results)
-                    found_skus.update({r['sku'] for r in fts_results})
-                    rem = limit - len(rows)
-                except Exception as e:
-                    print(f"FTS5 Search Error: {e}")
+        # 1. Text Search (q)
+        q = (q or "").strip()
+        if q:
+            # We use a simple LIKE approach for now to combine with other filters easily
+            # FTS matches are hard to combine with complex WHEREs without joining
+            # For simplicity and robustness with sorting/filtering:
+            tokens = q.split()
+            for t in tokens:
+                where_clauses.append("(lower(sku) LIKE ? OR lower(name) LIKE ?)")
+                params.append(f"%{t}%")
+                params.append(f"%{t}%")
 
-                # 2. Fallback to LIKE if we still need more results
-                # This ensures we find items even if FTS5 has issues with certain characters
-                if rem > 0:
-                    like_clauses = []
-                    params = list(found_skus)
-                    for t in tokens:
-                        like_clauses.append("(lower(i.sku) LIKE ? OR lower(i.name) LIKE ?)")
-                        params.append(f"%{t}%")
-                        params.append(f"%{t}%")
-                    
-                    placeholders = ",".join("?" * len(found_skus)) if found_skus else "''"
-                    sql_like = f"""
-                        SELECT * FROM items_latest i
-                        WHERE i.sku NOT IN ({placeholders})
-                        AND {" AND ".join(like_clauses)}
-                        ORDER BY i.created_at DESC, i.sku ASC
-                        LIMIT ?
-                    """
-                    params.append(rem)
-                    cursor = conn.execute(sql_like, params)
-                    rows.extend(cursor.fetchall())
+        # 2. Filters
+        if filters:
+            for col, val in filters.items():
+                if not val: continue
+                val = str(val).strip()
+                
+                # Special handling for quantity logic embedded in price fields (from UI convention 'q>10')
+                # But here we expect the caller to separate them if possible. 
+                # If the UI sends 'q>10' as 'our_price', we need to handle it or expect UI to split.
+                # Let's assume UI sends specific keys like 'our_qty' if it wants to filter qty.
+                
+                if col in ['our_price', 'our_qty', 'my_sklad_price', 'my_sklad_qty', 'min_sup_price', 'min_sup_qty']:
+                    op, num_val = _parse_filter_value(val)
+                    where_clauses.append(f"{col} {op} ?")
+                    params.append(num_val)
+                elif col == 'min_sup_supplier':
+                     # Text match for supplier
+                     where_clauses.append(f"lower({col}) LIKE ?")
+                     params.append(f"%{val.lower()}%")
         
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        
+        query = f"""
+            SELECT * FROM items_latest
+            WHERE {where_sql}
+            ORDER BY {order_col} {order_dir}, sku ASC
+            LIMIT ?
+        """
+        params.append(limit)
+        
+        rows = conn.execute(query, params).fetchall()
         return {"items": [_augment_item_with_stats(dict(r)) for r in rows]}
     finally:
         conn.close()
 
-def _augment_item_with_stats(item_dict):
-    """Adds supplier stats (available/total) to the item dictionary."""
-    try:
-        sups = json.loads(item_dict.get('suppliers_json', '[]'))
-        total = 0
-        in_stock = 0
-        for s in sups:
-            name = s.get('supplier', '').strip().lower()
-            if not name or name == 'мой склад':
-                continue
-            total += 1
-            if float(s.get('qty', 0)) > 0:
-                in_stock += 1
-        # Always return a string to distinguish from missing field
-        item_dict['sup_stats'] = f"({in_stock}/{total})"
-    except Exception:
-        item_dict['sup_stats'] = "(err)"
-    return item_dict
-
-# --- Routes ---
+# ... (augment item stays same)
 
 @app.route('/api/search')
 def api_search():
     q = request.args.get('q', '').strip()
     limit = request.args.get('limit', 20, type=int)
-    results = {"items": []}
-    if q:
-        results = _search_items(q, limit)
+    sort_by = request.args.get('sort_by', 'created_at')
+    sort_asc = request.args.get('sort_asc', 'false') == 'true'
+    
+    filters = {
+        'our_price': request.args.get('our_price'),
+        'our_qty': request.args.get('our_qty'),
+        'my_sklad_price': request.args.get('my_sklad_price'),
+        'my_sklad_qty': request.args.get('my_sklad_qty'),
+        'min_sup_price': request.args.get('min_sup_price'),
+        'min_sup_supplier': request.args.get('min_sup_supplier')
+    }
+    
+    results = _get_items(q, limit, sort_by, sort_asc, filters)
     return jsonify(results)
 
 @app.route('/')
 @login_required
 def index():
     q = request.args.get('q', '').strip()
-    limit = request.args.get('limit', 20, type=int)
+    limit = request.args.get('limit', 50, type=int) # Increased default limit
     
+    # We load defaults. Sorting/Filtering usually happens via API reload on the page, 
+    # but initial load can basically be "Latest items"
+    # Or we can support params here too for deep linking
+    sort_by = request.args.get('sort_by', 'created_at')
+    sort_asc = request.args.get('sort_asc', 'false') == 'true'
+    
+    filters = {
+        'our_price': request.args.get('our_price'),
+        'our_qty': request.args.get('our_qty'),
+        'min_sup_price': request.args.get('min_sup_price'),
+    }
+
     status = _get_status()
-    results = _search_items(q, limit)
+    results = _get_items(q, limit, sort_by, sort_asc, filters)
 
     return render_template('index.html', 
                            q=q, 
