@@ -307,7 +307,10 @@ def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
         # Check for sharp price changes (only if not new)
         try:
             # Check min_sup_price
-            old_min = float(prev[7] if prev[7] is not None else 0) # index 7 is min_sup_price
+            # existing tuple: (name, suppliers_json, our_price, our_qty, my_sklad_price, my_sklad_qty, min_sup_price, min_sup_qty, min_sup_supplier)
+            # indices:         0     1               2          3        4               5             6              7            8
+            
+            old_min = float(prev[6] if prev[6] is not None else 0) 
             new_min = float(it['min_sup_price'] if it['min_sup_price'] is not None else 0)
             
             if old_min > 0 and new_min > 0:
@@ -323,7 +326,7 @@ def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
                     })
                     
             # Check our_price
-            old_our = float(prev[3] if prev[3] is not None else 0) # index 3 is our_price
+            old_our = float(prev[2] if prev[2] is not None else 0)
             new_our = float(it['our_price'] if it['our_price'] is not None else 0)
             
             if old_our > 0 and new_our > 0:
