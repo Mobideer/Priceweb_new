@@ -216,14 +216,81 @@
             supplier: document.getElementById('filter-supplier')?.value.toLowerCase() || ''
         };
 
+        const parseOperator = (filterVal, itemVal) => {
+            if (!filterVal) return true;
+            filterVal = filterVal.trim();
+            itemVal = Number(itemVal) || 0;
+
+            let operator = '=';
+            let value = filterVal;
+
+            if (filterVal.startsWith('>=')) { operator = '>='; value = filterVal.substring(2); }
+            else if (filterVal.startsWith('<=')) { operator = '<='; value = filterVal.substring(2); }
+            else if (filterVal.startsWith('>')) { operator = '>'; value = filterVal.substring(1); }
+            else if (filterVal.startsWith('<')) { operator = '<'; value = filterVal.substring(1); }
+            else if (filterVal.startsWith('=')) { operator = '='; value = filterVal.substring(1); }
+            else if (filterVal.startsWith('!=')) { operator = '!='; value = filterVal.substring(2); }
+            else if (filterVal.startsWith('!')) { operator = '!='; value = filterVal.substring(1); }
+
+            const targetVal = Number(value);
+            if (isNaN(targetVal)) return false; // Invalid number in filter
+
+            switch (operator) {
+                case '>': return itemVal > targetVal;
+                case '<': return itemVal < targetVal;
+                case '>=': return itemVal >= targetVal;
+                case '<=': return itemVal <= targetVal;
+                case '=': return itemVal === targetVal;
+                case '!=': return itemVal !== targetVal;
+                default: return false;
+            }
+        };
+
+        const checkPriceOrQty = (filterText, price, qty) => {
+            if (!filterText) return true;
+            // Check for explicit 'q' prefix for quantity
+            if (filterText.toLowerCase().startsWith('q')) {
+                let criteria = filterText.substring(1).trim();
+                // If starts with : or space, remove it
+                if (criteria.startsWith(':')) criteria = criteria.substring(1).trim();
+                return parseOperator(criteria, qty);
+            }
+            // Otherwise default to price filter
+            return parseOperator(filterText, price);
+        };
+
         let filteredItems = items.filter(item => {
-            if (filters.product && !item.name.toLowerCase().includes(filters.product) && !item.sku.toLowerCase().includes(filters.product)) return false;
-            // Simple logic for price filters: > value. Can be improved.
-            // For now, let's treat price inputs as "matches text" for simplicity or numbers?
-            // User requested "filtering", usually text match or ranges. simple includes for now.
-            if (filters.our_price && !String(item.our_price).includes(filters.our_price)) return false;
-            if (filters.mysklad && !String(item.my_sklad_price).includes(filters.mysklad)) return false;
-            if (filters.supplier && !(item.min_sup_supplier || '').toLowerCase().includes(filters.supplier)) return false;
+            // 1. Product Filter: Name OR SKU OR Dates
+            if (filters.product) {
+                const search = filters.product;
+                const created = formatTs(item.created_at).toLowerCase();
+                const updated = formatTs(item.updated_at).toLowerCase();
+                const match = item.name.toLowerCase().includes(search) ||
+                    item.sku.toLowerCase().includes(search) ||
+                    created.includes(search) ||
+                    updated.includes(search);
+                if (!match) return false;
+            }
+
+            // 2. Our Price & Qty
+            if (!checkPriceOrQty(filters.our_price, item.our_price, item.our_qty)) return false;
+
+            // 3. MySklad Price & Qty
+            if (!checkPriceOrQty(filters.mysklad, item.my_sklad_price, item.my_sklad_qty)) return false;
+
+            // 4. Supplier: Name Match OR Price/Qty (if starts with > < = etc or q)
+            if (filters.supplier) {
+                const f = filters.supplier.trim();
+                const isNumericFilter = ['>', '<', '=', '!', 'q'].some(c => f.startsWith(c));
+
+                if (isNumericFilter) {
+                    if (!checkPriceOrQty(f, item.min_sup_price, item.min_sup_qty)) return false;
+                } else {
+                    // Text match against supplier name
+                    if (!(item.min_sup_supplier || '').toLowerCase().includes(f)) return false;
+                }
+            }
+
             return true;
         });
 
