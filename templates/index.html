@@ -136,7 +136,9 @@
             {% for item in items %}
             <tr class="product-row" style="cursor: pointer;" onclick="toggleDetails('{{ item.sku }}')">
                 <td data-label="Product">
-                    <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">{{
+                    <div
+                        style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px; word-break: break-word; overflow-wrap: anywhere;">
+                        {{
                         item.name }}</div>
                     <div style="font-size: 0.85em; opacity: 0.7;">SKU: {{ item.sku }} | Created: {{
                         item.created_at|format_ts }} | Updated: {{
@@ -452,7 +454,7 @@
             html += `
             <tr class="${rowClass}" style="cursor: pointer;" onclick="toggleDetails('${item.sku}')">
                 <td data-label="Product">
-                    <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px;">${item.name || ''}</div>
+                    <div style="font-weight: bold; color: var(--accent-color); font-size: 1.1em; margin-bottom: 4px; word-break: break-word; overflow-wrap: anywhere;">${item.name || ''}</div>
                     <div style="font-size: 0.85em; opacity: 0.7;">
                         SKU: <a href="/?q=${item.sku}" style="color: inherit; text-decoration: underline;" onclick="event.stopPropagation()">${item.sku}</a> | 
                         Created: ${formatTs(item.created_at)} | 
