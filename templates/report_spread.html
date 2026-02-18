@@ -130,13 +130,26 @@
                             {% for s in in_stock + out_of_stock %}
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                                 <td style="padding: 6px 8px;">{{ s.supplier }}</td>
-                                <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">{{
-                                    s.supplier_sku }}</td>
-                                <td style="padding: 6px 8px; text-align: right; font-weight: bold;">
+                                <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">
+                                    {{ s.supplier_sku }}
+                                    {% if s.product_name %}
+                                    <div
+                                        style="font-family: sans-serif; font-size: 0.85em; color: var(--text-muted); margin-top: 2px;">
+                                        {{ s.product_name }}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td style="padding: 6px 8px; text-align: right; font-weight: bold;
+                                    {% if item.our_price and s.price %}
+                                        {% if s.price < item.our_price %}color: var(--success-color);
+                                        {% elif s.price > item.our_price %}color: var(--danger-color);
+                                        {% endif %}
+                                    {% endif %}">
                                     {% if s.currency != 'RUB' %}
-                                    <span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">{{
+                                    <span
+                                        style="font-size: 0.9em; opacity: 0.8; font-weight: normal; color: var(--text-color);">{{
                                         s.original_price }} {{ s.currency }}</span>
-                                    <span style="margin: 0 4px; opacity: 0.5;">→</span>
+                                    <span style="margin: 0 4px; opacity: 0.5; color: var(--text-color);">→</span>
                                     {% endif %}
                                     {{ s.price }} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>
                                 </td>

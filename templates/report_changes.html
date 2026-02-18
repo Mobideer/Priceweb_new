@@ -350,14 +350,23 @@
 
                 suppliers.forEach(s => {
                     const priceDisplay = s.currency !== 'RUB'
-                        ? `<span style="font-size: 0.9em; opacity: 0.8; font-weight: normal;">${s.original_price} ${s.currency}</span> <span style="margin: 0 4px; opacity: 0.5;">→</span> ${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`
+                        ? `<span style="font-size: 0.9em; opacity: 0.8; font-weight: normal; color: var(--text-color);">${s.original_price} ${s.currency}</span> <span style="margin: 0 4px; opacity: 0.5; color: var(--text-color);">→</span> ${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`
                         : `${s.price} <span style="font-size: 0.8em; opacity: 0.6;">RUB</span>`;
+
+                    let priceStyle = 'padding: 6px 8px; text-align: right; font-weight: bold;';
+                    if (item.current_our_price && s.price) {
+                        if (s.price < item.current_our_price) priceStyle += ' color: var(--success-color);';
+                        else if (s.price > item.current_our_price) priceStyle += ' color: var(--danger-color);';
+                    }
 
                     suppliersHtml += `
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <td style="padding: 6px 8px;">${s.supplier}</td>
-                        <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">${s.supplier_sku || ''}</td>
-                        <td style="padding: 6px 8px; text-align: right; font-weight: bold;">${priceDisplay}</td>
+                        <td style="padding: 6px 8px; font-family: monospace; font-size: 0.9em;">
+                            ${s.supplier_sku || ''}
+                            ${s.product_name ? `<div style="font-family: sans-serif; font-size: 0.85em; color: var(--text-muted); margin-top: 2px;">${s.product_name}</div>` : ''}
+                        </td>
+                        <td style="${priceStyle}">${priceDisplay}</td>
                         <td style="padding: 6px 8px; text-align: right; color: ${s.qty > 0 ? '#4caf50' : '#f44336'};">${s.qty}</td>
                     </tr>`;
                 });

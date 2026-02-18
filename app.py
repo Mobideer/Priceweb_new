@@ -369,7 +369,7 @@ def report_spread():
                         suppliers_all.add(name)
             except: continue
         
-        query = f"SELECT sku, name, suppliers_json FROM items_latest WHERE min_sup_price > 0"
+        query = f"SELECT sku, name, our_price, suppliers_json FROM items_latest WHERE min_sup_price > 0"
         rows = conn.execute(query).fetchall()
         
         results = []
@@ -414,6 +414,7 @@ def report_spread():
             results.append({
                 'sku': r['sku'],
                 'name': r['name'],
+                'our_price': r['our_price'],
                 'min_price': min_p,
                 'min_suppliers': ", ".join(min_s_names),
                 'max_price': max_p,
@@ -570,7 +571,7 @@ def report_changes():
         # We need name AND suppliers_json from items_latest
         query = """
             SELECT s.sku, s.ts, s.min_sup_price, s.our_price, s.min_sup_supplier, 
-                   i.name, i.suppliers_json
+                   i.name, i.suppliers_json, i.our_price as current_our_price
             FROM item_snapshots s
             LEFT JOIN items_latest i ON s.sku = i.sku
             WHERE s.ts >= ?
@@ -618,7 +619,8 @@ def report_changes():
                                 'new_supplier': curr['min_sup_supplier'],
                                 'diff_pct': round(diff_pct, 1),
                                 'type': 'min_price', # Market Price
-                                'suppliers_json': suppliers_json
+                                'suppliers_json': suppliers_json,
+                                'current_our_price': first['current_our_price']
                             })
                             # If found one change type for this timestamp, we might want to continue to check next type
                             # But if 'min_price' changed, we added it. 
@@ -645,7 +647,8 @@ def report_changes():
                                 'new_supplier': "Наш магазин",
                                 'diff_pct': round(diff_pct, 1),
                                 'type': 'our_price', # Our Price
-                                'suppliers_json': suppliers_json
+                                'suppliers_json': suppliers_json,
+                                'current_our_price': first['current_our_price']
                             })
 
         # Sort by latest change first, then largest change
