@@ -1,0 +1,15 @@
+# General Rules
+- Всегда отвечай на русском языке
+- Be concise and clear.
+- Prefer Python 3.10+ features when applicable.
+- Use Russian for comments and documentation unless specified otherwise.
+
+# Project Specifics
+- This is a Flask application with SQLite database.
+- Use `db.py` for database interactions.
+- Avoid adding heavy dependencies unless necessary.
+- Keep the UI simple and functional (HTML/CSS/Vanilla JS).
+
+# Code Style
+- Follow PEP 8 guidelines.
+- Use type hints where helpful.
