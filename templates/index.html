@@ -463,6 +463,7 @@
                     <div class="price-val">${item.our_price} ₽</div>
                     <div class="qty-val" style="color: ${item.our_qty > 0 ? '#4caf50' : '#f44336'}">кол-во: ${item.our_qty}</div>
                 </td>
+                <td style="text-align: right;">
                     <div class="price-val">${msPrice} ₽</div>
                     <div class="qty-val" style="color: ${msQty > 0 ? '#4caf50' : '#f44336'}">кол-во: ${msQty}</div>
                     ${msDiff !== 0 ? `<div style="font-size:0.8em; color:${msDiff > 0 ? '#f44336' : '#4caf50'}">${msDiff > 0 ? 'Δ ' : ''}${msDiff}</div>` : ''}
