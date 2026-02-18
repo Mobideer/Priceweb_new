@@ -567,19 +567,17 @@ def report_changes():
     try:
         cutoff = int(time.time()) - days * 86400
         
-        # Get snapshots for the period
-        # We need name AND suppliers_json from items_latest
+        # Optimize: Fetch only necessary snapshot data first without joining heavy items_latest
         query = """
-            SELECT s.sku, s.ts, s.min_sup_price, s.our_price, s.min_sup_supplier, 
-                   i.name, i.suppliers_json, i.our_price as current_our_price
-            FROM item_snapshots s
-            LEFT JOIN items_latest i ON s.sku = i.sku
-            WHERE s.ts >= ?
-            ORDER BY s.sku, s.ts ASC
+            SELECT sku, ts, min_sup_price, our_price, min_sup_supplier
+            FROM item_snapshots
+            WHERE ts >= ?
+            ORDER BY sku, ts ASC
         """
         rows = conn.execute(query, (cutoff,)).fetchall()
         
         changes = []
+        affected_skus = set()
         
         # Group by SKU
         from itertools import groupby
@@ -589,11 +587,6 @@ def report_changes():
             snaps = list(group)
             if len(snaps) < 2:
                 continue
-                
-            # Use name/json from the first snapshot joined (should be consistent as i.name comes from items_latest)
-            first = snaps[0]
-            name = first['name'] or sku
-            suppliers_json = first['suppliers_json'] or "[]"
             
             # Iterate through snapshots to find changes
             for i in range(1, len(snaps)):
@@ -610,7 +603,6 @@ def report_changes():
                         if abs(diff_pct) >= threshold:
                             changes.append({
                                 'sku': sku,
-                                'name': name,
                                 'ts': curr['ts'],
                                 'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
                                 'old_price': p_prev,
@@ -619,14 +611,8 @@ def report_changes():
                                 'new_supplier': curr['min_sup_supplier'],
                                 'diff_pct': round(diff_pct, 1),
                                 'type': 'min_price', # Market Price
-                                'suppliers_json': suppliers_json,
-                                'current_our_price': first['current_our_price']
                             })
-                            # If found one change type for this timestamp, we might want to continue to check next type
-                            # But if 'min_price' changed, we added it. 
-                            # We don't skip to next iteration because 'our_price' might have changed too at the same step
-                            # (though unlikely in exact same snapshot usually, but possible).
-                            # Let's removing "continue" to allow catching both if they happen simultaneously.
+                            affected_skus.add(sku)
 
                 # Check our_price
                 if type_filter in ['all', 'our_price']:
@@ -638,7 +624,6 @@ def report_changes():
                         if abs(diff_pct) >= threshold:
                             changes.append({
                                 'sku': sku,
-                                'name': name,
                                 'ts': curr['ts'],
                                 'date': datetime.fromtimestamp(curr['ts']).strftime('%Y-%m-%d %H:%M'),
                                 'old_price': p_prev_our,
@@ -647,9 +632,28 @@ def report_changes():
                                 'new_supplier': "Наш магазин",
                                 'diff_pct': round(diff_pct, 1),
                                 'type': 'our_price', # Our Price
-                                'suppliers_json': suppliers_json,
-                                'current_our_price': first['current_our_price']
                             })
+                            affected_skus.add(sku)
+        
+        # Batch fetch details for affected SKUs
+        if affected_skus:
+            placeholders = ','.join(['?'] * len(affected_skus))
+            details_query = f"SELECT sku, name, suppliers_json, our_price FROM items_latest WHERE sku IN ({placeholders})"
+            details_rows = conn.execute(details_query, list(affected_skus)).fetchall()
+            details_map = {r['sku']: r for r in details_rows}
+            
+            # Enrich changes with details
+            valid_changes = []
+            for c in changes:
+                if c['sku'] in details_map:
+                    item = details_map[c['sku']]
+                    c['name'] = item['name']
+                    c['suppliers_json'] = item['suppliers_json']
+                    c['current_our_price'] = item['our_price']
+                    valid_changes.append(c)
+            changes = valid_changes
+        else:
+            changes = []
 
         # Sort by latest change first, then largest change
         changes.sort(key=lambda x: (x['ts'], abs(x['diff_pct'])), reverse=True)
