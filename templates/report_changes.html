@@ -122,9 +122,9 @@
             </td>
             <td style="text-align: right;">
                 {% if item.diff_pct > 0 %}
-                <span style="color: #f44336">Δ {{ item.diff_pct }}% 📈</span>
+                <span style="color: #f44336">Δ {{ item.diff_pct|abs }}% 📈</span>
                 {% else %}
-                <span style="color: #4caf50">Δ {{ item.diff_pct }}% 📉</span>
+                <span style="color: #4caf50">Δ {{ item.diff_pct|abs }}% 📉</span>
                 {% endif %}
             </td>
             <td style="text-align: center; vertical-align: middle;">

@@ -468,7 +468,7 @@
                 <td style="text-align: right;">
                     <div class="price-val">${msPrice} ₽</div>
                     <div class="qty-val" style="color: ${msQty > 0 ? '#4caf50' : '#f44336'}">кол-во: ${msQty}</div>
-                    ${msDiff !== 0 ? `<div style="font-size:0.8em; color:${msDiff > 0 ? '#f44336' : '#4caf50'}">${msDiff > 0 ? 'Δ ' : ''}${msDiff}</div>` : ''}
+                    ${msDiff !== 0 ? `<div style="font-size:0.8em; color:${msDiff > 0 ? '#f44336' : '#4caf50'}">Δ ${Math.abs(msDiff)}</div>` : ''}
                 </td>
                 <td style="text-align: right;">
                     <div class="price-val">${item.min_sup_price || 'N/A'} ${item.min_sup_price ? '₽' : ''}</div>
