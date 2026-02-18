@@ -28,7 +28,7 @@ db.ensure_schema()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
 
-APP_VERSION = "1.7.0"  # UI/UX Overhaul: Unified Toolbar & Advanced Filtering
+APP_VERSION = "1.8.0"  # Performance Optimization & Fixes
 
 @app.context_processor
 def inject_version():
