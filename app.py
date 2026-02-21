@@ -19,6 +19,8 @@ except ImportError:
 
 from flask import Flask, render_template, request, jsonify, abort, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import db
 
@@ -26,7 +28,17 @@ import db
 db.ensure_schema()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super-secret-price-matrix-key")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+if not app.secret_key:
+    raise ValueError("FLASK_SECRET_KEY environment variable is not set")
+
+# Initialize rate limiter
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
 APP_VERSION = "1.8.0"  # Performance Optimization & Fixes
 
@@ -54,7 +66,9 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        if username == "priceuser" and password == "priceuser":
+        expected_user = os.environ.get("WEB_USERNAME", "priceuser")
+        expected_pass = os.environ.get("WEB_PASSWORD", "priceuser")
+        if username == expected_user and password == expected_pass:
             user = User(username)
             login_user(user)
             return redirect(url_for('index'))
@@ -91,7 +105,7 @@ def format_ts_filter(ts):
             return datetime.fromtimestamp(int(ts), tz=pytz.UTC).astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
         else:
             return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(ts)))
-    except:
+    except (ValueError, TypeError, OSError):
         return str(ts)
 
 @app.template_filter('fromjson')
@@ -119,10 +133,11 @@ def _parse_filter_value(val):
     
     try:
         return op, float(val)
-    except:
+    except (ValueError, TypeError):
         return '=', val # Fallback to string equality if not a number
 
 @app.route('/api/run-worker-external', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def run_worker_external():
     """Trigger worker via external URL with token."""
     token = request.args.get('token')
@@ -257,6 +272,7 @@ def _augment_item_with_stats(item_dict):
 
 
 @app.route('/api/search')
+@limiter.limit("30 per minute")
 def api_search():
     q = request.args.get('q', '').strip()
     limit = request.args.get('limit', 20, type=int)
@@ -367,7 +383,7 @@ def report_spread():
                     name = s.get('supplier', '').strip()
                     if name and name.lower() != 'мой склад':
                         suppliers_all.add(name)
-            except: continue
+            except (json.JSONDecodeError, TypeError): continue
         
         query = f"SELECT sku, name, our_price, suppliers_json FROM items_latest WHERE min_sup_price > 0"
         rows = conn.execute(query).fetchall()
@@ -376,7 +392,7 @@ def report_spread():
         for r in rows:
             try:
                 sups = json.loads(r['suppliers_json'])
-            except: continue
+            except (json.JSONDecodeError, TypeError): continue
                 
             valid_sups = []
             for s in sups:
@@ -472,7 +488,7 @@ def report_markup():
                     name = s.get('supplier', '').strip()
                     if name and name.lower() != 'мой склад':
                         suppliers_all.add(name)
-            except: continue
+            except (json.JSONDecodeError, TypeError): continue
 
         query = "SELECT * FROM items_latest WHERE our_price > 0"
         rows = conn.execute(query).fetchall()
@@ -484,7 +500,7 @@ def report_markup():
             
             try:
                 sups = json.loads(r['suppliers_json'])
-            except: continue
+            except (json.JSONDecodeError, TypeError): continue
                 
             filtered_prices = []
             filtered_sups = []

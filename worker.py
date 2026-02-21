@@ -22,7 +22,7 @@ def log_with_timestamp(message):
         from datetime import datetime
         tz = pytz.timezone('Europe/Moscow')
         timestamp = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
-    except:
+    except (ImportError, KeyError):
         # Fallback if pytz is not available
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     
@@ -74,8 +74,6 @@ def download_if_needed(conn):
         
         resp.raise_for_status()
         
-        resp.raise_for_status()
-        
         # Download to temp file first, using PID to avoid collisions
         tmp_file = f"{LOCAL_DATA_FILE}.tmp.{os.getpid()}"
         log_with_timestamp(f"Downloading new data to {tmp_file}...")
@@ -94,7 +92,7 @@ def download_if_needed(conn):
             try:
                 if os.path.exists(tmp_file):
                     os.remove(tmp_file)
-            except:
+            except OSError:
                 pass
             raise
         except Exception:
@@ -119,12 +117,12 @@ def process_single_product(p, rates):
     
     try:
         our_price = float(p.get('price', 0))
-    except:
+    except (ValueError, TypeError):
         our_price = 0.0
         
     try:
         our_qty = float(p.get('quantity', 0))
-    except:
+    except (ValueError, TypeError):
         our_qty = 0.0
         
     my_sklad_price = 0.0
@@ -148,12 +146,12 @@ def process_single_product(p, rates):
             
         try:
             raw_p = float(s_prod.get('price', 0))
-        except:
+        except (ValueError, TypeError):
             raw_p = 0.0
             
         try:
             qty = float(s_prod.get('quantity', 0))
-        except:
+        except (ValueError, TypeError):
             qty = 0.0
             
         currency = s_prod.get('currency', 'RUB').upper()
@@ -215,7 +213,7 @@ def vacuum_db():
                 if free < (db_size * 1.5):
                     log_with_timestamp(f"Skipping VACUUM: insufficient free space ({free/(1024*1024):.1f}MB free, need ~{db_size*1.5/(1024*1024):.1f}MB)")
                     return
-            except:
+            except OSError:
                 pass
 
         # Give a small moment for other connections to truly finalize
@@ -348,18 +346,60 @@ def process_item_loop(p, rates, ts, existing, cur_upsert, cur_snap, stats):
         except Exception as e:
             # Don't fail the worker for this
             pass
-def run():
-    host = os.uname().nodename
-    notify.notify_start(host)
-    t0 = time.time()
-    
-    rates = get_exchange_rates()
-    log_with_timestamp(f"Current Rates: {rates}")
-    
-    stats_helper = StatsHelper()
-    ts = int(time.time())
+WORKER_LOCK_FILE = "data/worker.lock"
 
+def acquire_lock():
+    """Acquire a file lock to prevent concurrent worker runs."""
+    lock_dir = os.path.dirname(WORKER_LOCK_FILE)
+    if lock_dir and not os.path.exists(lock_dir):
+        os.makedirs(lock_dir, exist_ok=True)
+    
+    # Check if lock file exists and is recent (within 30 minutes)
+    if os.path.exists(WORKER_LOCK_FILE):
+        try:
+            mtime = os.path.getmtime(WORKER_LOCK_FILE)
+            if time.time() - mtime < 1800:  # 30 minutes
+                log_with_timestamp("Worker is already running (lock file exists). Exiting.")
+                return False
+            else:
+                # Lock is stale, remove it
+                os.remove(WORKER_LOCK_FILE)
+        except OSError:
+            pass
+    
+    # Create lock file
     try:
+        with open(WORKER_LOCK_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+        return True
+    except OSError as e:
+        log_with_timestamp(f"Could not create lock file: {e}")
+        return False
+
+def release_lock():
+    """Release the file lock."""
+    try:
+        if os.path.exists(WORKER_LOCK_FILE):
+            os.remove(WORKER_LOCK_FILE)
+    except OSError:
+        pass
+
+def run():
+    # Check for concurrent worker run
+    if not acquire_lock():
+        return
+    
+    try:
+        host = os.uname().nodename
+        notify.notify_start(host)
+        t0 = time.time()
+        
+        rates = get_exchange_rates()
+        log_with_timestamp(f"Current Rates: {rates}")
+        
+        stats_helper = StatsHelper()
+        ts = int(time.time())
+
         db.ensure_schema()
         conn = db.get_connection()
         conn.isolation_level = None # Autocommit mode for explicit transactions
@@ -382,7 +422,7 @@ def run():
                     db_path = db_st.get("db_path", "priceweb.db")
                     if os.path.exists(db_path):
                         final_stats["db_size_mb"] = os.path.getsize(db_path) / (1024 * 1024)
-                except:
+                except (OSError, KeyError):
                     pass
                 
                 notify.notify_success(final_stats)
@@ -448,7 +488,7 @@ def run():
                 db_path = db_st.get("db_path", "priceweb.db")
                 if os.path.exists(db_path):
                     stats["db_size_mb"] = os.path.getsize(db_path) / (1024 * 1024)
-            except:
+            except OSError:
                 pass
 
             notify.notify_success(stats)
@@ -498,7 +538,7 @@ def run():
         notify.notify_fail(f"Worker Error:\n{str(e)}\n\nTraceback summary:\n{last_part}")
         raise
     finally:
-        pass
+        release_lock()
 
 if __name__ == "__main__":
     run()

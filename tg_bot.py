@@ -70,7 +70,7 @@ def format_ts(ts: int) -> str:
         import pytz
         tz = pytz.timezone("Europe/Moscow")
         return datetime.fromtimestamp(ts, tz).strftime('%Y-%m-%d %H:%M:%S')
-    except:
+    except (ValueError, OSError):
         return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
 
 def get_db_status_text() -> str:

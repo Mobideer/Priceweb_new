@@ -3,5 +3,6 @@ requests
 ijson
 gunicorn
 flask-login
+flask-limiter
 pytz
 python-dotenv

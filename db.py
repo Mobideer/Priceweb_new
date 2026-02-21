@@ -20,8 +20,8 @@ def get_connection(timeout: int = 30) -> sqlite3.Connection:
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
-    except:
-        pass
+    except Exception:
+        pass  # pragma: no cover - best effort logging
         
     return conn
 

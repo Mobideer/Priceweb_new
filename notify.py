@@ -18,8 +18,8 @@ def get_now_str() -> str:
         try:
             tz = pytz.timezone(TIMEZONE)
             return datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
-        except:
-            pass
+        except Exception:
+            pass  # Fallback
     return time.strftime('%Y-%m-%d %H:%M:%S')
 
 def send(text: str, alert_key: Optional[str] = None, reply_markup: Optional[dict] = None) -> None:
