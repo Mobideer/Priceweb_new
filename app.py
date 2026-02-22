@@ -94,9 +94,7 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
-
-APP_VERSION = "1.8.2"  # Token Header Migration & User Rate Limits
-
+APP_VERSION = "1.8.4"  # Health Check & Pydantic Validation
 # ... (skipped for brevity, but I need to do this in two separate replace calls if they are far apart, they are at line 44 and 143, so doing multi-replace)
 
 @app.context_processor
@@ -421,6 +419,26 @@ def ui_history():
         return render_template('partials/history.html', sku=sku, items=data, days=days)
     finally:
         conn.close()
+
+# --- Health Check ---
+@app.route('/health')
+@limiter.limit("60 per minute")
+def health_check():
+    try:
+        conn = db.get_connection()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+        return {
+            "status": "ok", 
+            "db": "ok", 
+            "version": APP_VERSION
+        }, 200
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": str(e), 
+            "version": APP_VERSION
+        }, 500
 
 # --- Reports ---
 
