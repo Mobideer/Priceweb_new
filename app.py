@@ -32,15 +32,29 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 if not app.secret_key:
     raise ValueError("FLASK_SECRET_KEY environment variable is not set")
 
+def get_rate_limit_key():
+    # 1. External scripts via API Token
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1]
+        return f"token:{token}"
+        
+    # 2. Web interface via Logged-in User
+    if current_user.is_authenticated:
+        return f"user:{current_user.id}"
+        
+    # 3. Fallback for unauthorized/anonymous visitors
+    return f"ip:{get_remote_address()}"
+
 # Initialize rate limiter
 limiter = Limiter(
-    get_remote_address,
+    get_rate_limit_key,
     app=app,
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
 
-APP_VERSION = "1.8.1"  # Token Header Migration
+APP_VERSION = "1.8.2"  # Token Header Migration & User Rate Limits
 
 # ... (skipped for brevity, but I need to do this in two separate replace calls if they are far apart, they are at line 44 and 143, so doing multi-replace)
 
