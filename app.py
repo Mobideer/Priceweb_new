@@ -21,11 +21,52 @@ from flask import Flask, render_template, request, jsonify, abort, redirect, url
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from pydantic import BaseModel, Field, ValidationError
 
 import db
 
 # Ensure database schema is up to date on start (runs even under gunicorn)
 db.ensure_schema()
+
+# --- Request Validation Schemas ---
+class SearchSchema(BaseModel):
+    q: str = ""
+    limit: int = Field(default=20, ge=1, le=500)
+    page: int = Field(default=1, ge=1)
+    sort_by: str = "created_at"
+    sort_asc: bool = False
+    our_price: Optional[str] = None
+    our_qty: Optional[str] = None
+    my_sklad_price: Optional[str] = None
+    my_sklad_qty: Optional[str] = None
+    min_sup_price: Optional[str] = None
+    min_sup_supplier: Optional[str] = None
+
+class HistorySchema(BaseModel):
+    sku: str
+    days: int = Field(default=7, ge=1)
+
+class SpreadReportSchema(BaseModel):
+    threshold: float = Field(default=20.0, ge=0)
+    limit: int = Field(default=100, ge=1, le=500)
+    page: int = Field(default=1, ge=1)
+    max_price: float = Field(default=2000000.0, ge=0)
+    in_stock_only: int = Field(default=1, ge=0, le=1)
+    exclude: List[str] = Field(default_factory=list)
+
+class MarkupReportSchema(BaseModel):
+    markup_pct: float = Field(default=10.0, ge=0)
+    limit: int = Field(default=100, ge=1, le=500)
+    page: int = Field(default=1, ge=1)
+    max_price: float = Field(default=2000000.0, ge=0)
+    in_stock_only: int = Field(default=1, ge=0, le=1)
+    qty_equal: int = Field(default=0, ge=0, le=1)
+    exclude: List[str] = Field(default_factory=list)
+
+class ChangesReportSchema(BaseModel):
+    days: int = Field(default=7, ge=1)
+    threshold: float = Field(default=30.0, ge=0)
+    type: str = "all"
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
@@ -293,60 +334,64 @@ def _augment_item_with_stats(item_dict):
 @app.route('/api/search')
 @limiter.limit("30 per minute")
 def api_search():
-    q = request.args.get('q', '').strip()
-    limit = request.args.get('limit', 20, type=int)
-    page = request.args.get('page', 1, type=int)
-    sort_by = request.args.get('sort_by', 'created_at')
-    sort_asc = request.args.get('sort_asc', 'false') == 'true'
-    
+    try:
+        args = SearchSchema(**request.args.to_dict())
+    except ValidationError as e:
+        return jsonify({"ok": False, "error": "Invalid parameters", "details": e.errors()}), 400
+        
     filters = {
-        'our_price': request.args.get('our_price'),
-        'our_qty': request.args.get('our_qty'),
-        'my_sklad_price': request.args.get('my_sklad_price'),
-        'my_sklad_qty': request.args.get('my_sklad_qty'),
-        'min_sup_price': request.args.get('min_sup_price'),
-        'min_sup_supplier': request.args.get('min_sup_supplier')
+        'our_price': args.our_price,
+        'our_qty': args.our_qty,
+        'my_sklad_price': args.my_sklad_price,
+        'my_sklad_qty': args.my_sklad_qty,
+        'min_sup_price': args.min_sup_price,
+        'min_sup_supplier': args.min_sup_supplier
     }
     
-    results = _get_items(q, limit, page, sort_by, sort_asc, filters)
+    results = _get_items(args.q.strip(), args.limit, args.page, args.sort_by, args.sort_asc, filters)
     return jsonify(results)
 
 @app.route('/')
 @login_required
 def index():
-    q = request.args.get('q', '').strip()
-    limit = request.args.get('limit', 50, type=int) # Increased default limit
-    
-    # We load defaults. Sorting/Filtering usually happens via API reload on the page, 
-    # but initial load can basically be "Latest items"
-    # Or we can support params here too for deep linking
-    sort_by = request.args.get('sort_by', 'created_at')
-    sort_asc = request.args.get('sort_asc', 'false') == 'true'
-    
+    try:
+        # For the index page, we might get missing args, so we pass what we have
+        # Pydantic will fill in defaults. For limit, we want a different default (50 vs 20)
+        # We can just override it before validation if not present
+        req_args = request.args.to_dict()
+        if 'limit' not in req_args:
+            req_args['limit'] = 50
+        args = SearchSchema(**req_args)
+    except ValidationError:
+        # For UI, if someone messes with the URL, just fallback to defaults instead of a raw JSON error
+        args = SearchSchema(limit=50)
+
     filters = {
-        'our_price': request.args.get('our_price'),
-        'our_qty': request.args.get('our_qty'),
-        'min_sup_price': request.args.get('min_sup_price'),
+        'our_price': args.our_price,
+        'our_qty': args.our_qty,
+        'min_sup_price': args.min_sup_price,
     }
 
     status = _get_status()
     # Pass page=1 for initial load
-    results = _get_items(q, limit, 1, sort_by, sort_asc, filters)
+    results = _get_items(args.q.strip(), args.limit, 1, args.sort_by, args.sort_asc, filters)
 
     return render_template('index.html', 
-                           q=q, 
-                           limit=limit, 
+                           q=args.q, 
+                           limit=args.limit, 
                            items=results['items'], 
                            status=status)
 
 @app.route('/ui/history')
 @login_required
 def ui_history():
-    sku = request.args.get('sku', '').strip()
-    days = request.args.get('days', 7, type=int)
+    try:
+        args = HistorySchema(**request.args.to_dict())
+    except ValidationError as e:
+        return f"Invalid parameters: {e}", 400
     
-    if not sku:
-        return "SKU required", 400
+    sku = args.sku
+    days = args.days
         
     conn = db.get_connection()
     try:
@@ -382,12 +427,21 @@ def ui_history():
 @app.route('/reports/spread')
 @login_required
 def report_spread():
-    threshold = request.args.get('threshold', 20.0, type=float)
-    per_page = request.args.get('limit', 100, type=int)
-    page = request.args.get('page', 1, type=int)
-    max_price = request.args.get('max_price', 2000000.0, type=float)
-    in_stock_only = request.args.get('in_stock_only', 1, type=int)
-    exclude_list = request.args.getlist('exclude')
+    try:
+        req_args = request.args.to_dict()
+        if 'exclude' in request.args:
+            req_args['exclude'] = request.args.getlist('exclude')
+        args = SpreadReportSchema(**req_args)
+    except ValidationError as e:
+        # Fallback to default if there's invalid values, similar to int() failing gracefully
+        args = SpreadReportSchema()
+        
+    threshold = args.threshold
+    per_page = args.limit
+    page = args.page
+    max_price = args.max_price
+    in_stock_only = args.in_stock_only
+    exclude_list = args.exclude
     exclude_set = {s.lower() for s in exclude_list}
     
     conn = db.get_connection()
@@ -486,13 +540,21 @@ def report_spread():
 @app.route('/reports/markup')
 @login_required
 def report_markup():
-    markup_pct = request.args.get('markup_pct', 10.0, type=float)
-    per_page = request.args.get('limit', 100, type=int)
-    page = request.args.get('page', 1, type=int)
-    max_price = request.args.get('max_price', 2000000.0, type=float)
-    in_stock_only = request.args.get('in_stock_only', 1, type=int)
-    qty_equal = request.args.get('qty_equal', 0, type=int)
-    exclude_list = request.args.getlist('exclude')
+    try:
+        req_args = request.args.to_dict()
+        if 'exclude' in request.args:
+            req_args['exclude'] = request.args.getlist('exclude')
+        args = MarkupReportSchema(**req_args)
+    except ValidationError:
+        args = MarkupReportSchema()
+    
+    markup_pct = args.markup_pct
+    per_page = args.limit
+    page = args.page
+    max_price = args.max_price
+    in_stock_only = args.in_stock_only
+    qty_equal = args.qty_equal
+    exclude_list = args.exclude
     exclude_set = {s.lower() for s in exclude_list}
     
     conn = db.get_connection()
@@ -594,9 +656,14 @@ def report_markup():
 @app.route('/reports/changes')
 @login_required
 def report_changes():
-    days = request.args.get('days', 7, type=int)
-    threshold = request.args.get('threshold', 30.0, type=float)
-    type_filter = request.args.get('type', 'all') # 'all', 'min_price', 'our_price'
+    try:
+        args = ChangesReportSchema(**request.args.to_dict())
+    except ValidationError:
+        args = ChangesReportSchema()
+        
+    days = args.days
+    threshold = args.threshold
+    type_filter = args.type
     
     conn = db.get_connection()
     try:

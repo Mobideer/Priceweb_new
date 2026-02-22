@@ -6,3 +6,4 @@ flask-login
 flask-limiter
 pytz
 python-dotenv
+pydantic>=2.0.0
