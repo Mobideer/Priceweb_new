@@ -108,15 +108,15 @@ def trigger_worker() -> str:
         
         # Use 127.0.0.1 to avoid IPv6 issues with 'localhost' in some environments
         url = f"http://127.0.0.1:{API_PORT}/api/reload"
-        params = {}
+        headers = {}
         if token:
-            params['token'] = token
+            headers['Authorization'] = f"Bearer {token}"
             
         # Increased timeout for potentially slow server response
         log_len = len(token) if token else 0
         print(f"[BOT] Triggering worker. API_PORT: {API_PORT}, Token Length: {log_len}")
         
-        resp = requests.get(url, params=params, timeout=60)
+        resp = requests.get(url, headers=headers, timeout=60)
         
         try:
             data = resp.json()

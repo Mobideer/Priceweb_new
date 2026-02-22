@@ -40,7 +40,9 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-APP_VERSION = "1.8.0"  # Performance Optimization & Fixes
+APP_VERSION = "1.8.1"  # Token Header Migration
+
+# ... (skipped for brevity, but I need to do this in two separate replace calls if they are far apart, they are at line 44 and 143, so doing multi-replace)
 
 @app.context_processor
 def inject_version():
@@ -140,7 +142,10 @@ def _parse_filter_value(val):
 @limiter.limit("5 per minute")
 def run_worker_external():
     """Trigger worker via external URL with token."""
-    token = request.args.get('token')
+    auth_header = request.headers.get('Authorization')
+    token = None
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1]
     secret = os.environ.get("WORKER_TOKEN")
     
     if not secret or token != secret:
@@ -684,16 +689,20 @@ def report_changes():
 
 @app.route('/api/reload')
 def api_reload():
-    token = request.args.get('token', '')
+    auth_header = request.headers.get('Authorization')
+    token = None
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1]
     expected_token = os.environ.get("RELOAD_TOKEN", "")
     
-    print(f"[API] Reload requested. Received token: {'set' if token else 'missing'} (len={len(token)}), Expected len: {len(expected_token)}")
+    token_len = len(token) if token else 0
+    print(f"[API] Reload requested. Received token: {'set' if token else 'missing'} (len={token_len}), Expected len: {len(expected_token)}")
     
     # Allow if token matches OR user is logged in
     if not (expected_token and token == expected_token) and not current_user.is_authenticated:
         if not expected_token:
             return jsonify({"ok": False, "error": "RELOAD_TOKEN not set in /etc/priceweb_new.env"}), 403
-        return jsonify({"ok": False, "error": f"Unauthorized (received len {len(token)}, expected len {len(expected_token)})"}), 403
+        return jsonify({"ok": False, "error": f"Unauthorized (received len {token_len}, expected len {len(expected_token)})"}), 403
     
     def run_worker():
         log_path = config.get_log_path()
